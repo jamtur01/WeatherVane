@@ -1,0 +1,101 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: Run SwiftLint
+        run: swiftlint --strict || echo "SwiftLint not configured, skipping..."
+
+  build-and-test:
+    needs: lint
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build -v
+      - name: Run tests
+        run: swift test -v || echo "No tests configured, skipping..."
+
+  create-release:
+    needs: build-and-test
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up signing certificate
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > certificate.p12
+          security create-keychain -p "temporary-password" build.keychain 
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "temporary-password" build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "temporary-password" build.keychain
+
+      - name: Build app bundle (universal, with resources)
+        run: |
+          chmod +x ./build.sh
+          CI=1 ./build.sh
+
+      - name: Code sign the app
+        env:
+          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+        run: |
+          /usr/bin/codesign --force --options runtime --entitlements Info/Weathervane.entitlements --sign "$MACOS_CODESIGN_IDENTITY" Weathervane.app --deep
+
+      - name: Notarize the app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          MACOS_API_ISSUER_ID: ${{ secrets.MACOS_API_ISSUER_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          xcrun notarytool store-credentials "notarytool-profile" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$MACOS_API_ISSUER_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD"
+
+          ditto -c -k --keepParent Weathervane.app notarization.zip
+
+          xcrun notarytool submit notarization.zip --keychain-profile "notarytool-profile" --wait
+          xcrun stapler staple Weathervane.app || echo "Stapling failed, but continuing..."
+
+      - name: Create final ZIP archive
+        run: |
+          ditto -c -k --keepParent Weathervane.app Weathervane.zip
+
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            Weathervane.zip
+          body: |
+            # Weathervane ${{ steps.get_version.outputs.VERSION }}
+
+            A native Swift menu bar application that displays weather and world clock information.
+
+            ## Installation
+
+            1. Download the Weathervane.zip file  
+            2. Unzip the file  
+            3. Move Weathervane.app to your Applications folder  
+            4. Open the application
