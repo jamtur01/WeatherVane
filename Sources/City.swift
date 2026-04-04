@@ -21,10 +21,10 @@ struct City: Equatable, Hashable {
     }
 
     func hash(into hasher: inout Hasher) {
-        hasher.combine(timeZoneIdentifier)
+        hasher.combine(code)
     }
 
     static func == (lhs: City, rhs: City) -> Bool {
-        return lhs.timeZoneIdentifier == rhs.timeZoneIdentifier
+        return lhs.code == rhs.code
     }
 }

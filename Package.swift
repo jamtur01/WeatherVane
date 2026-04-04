@@ -2,20 +2,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "CombinedApp",
+    name: "Weathervane",
     platforms: [
         .macOS(.v13)
     ],
     products: [
         .executable(
-            name: "CombinedApp",
-            targets: ["CombinedApp"]
+            name: "Weathervane",
+            targets: ["Weathervane"]
         )
     ],
     dependencies: [],
     targets: [
         .executableTarget(
-            name: "CombinedApp",
+            name: "Weathervane",
             dependencies: [],
             path: "Sources"
         )

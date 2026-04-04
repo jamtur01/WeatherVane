@@ -1,9 +1,11 @@
 import SwiftUI
 import Foundation
 
-final class CombinedAppState: ObservableObject {
+final class WeathervaneState: ObservableObject {
+    private static let selectedCityCodesKey = "selectedCityCodes"
+
     // Time zone state
-    @Published var selectedCities = TimeZoneManager.getDefaultCities()
+    @Published var selectedCities: [City] = []
     @Published var currentCityIndex = 0
     @Published var timeSliderOffset: TimeInterval = 0
 
@@ -24,6 +26,7 @@ final class CombinedAppState: ObservableObject {
     }
 
     init() {
+        selectedCities = loadSavedCities()
         startCityRotationTimer()
         fetchAllWeather()
         startWeatherTimer()
@@ -39,17 +42,12 @@ final class CombinedAppState: ObservableObject {
     private func startCityRotationTimer() {
         cityRotationTimer?.invalidate()
         cityRotationTimer = Timer.scheduledTimer(
-            timeInterval: Constants.cityRotationInterval,
-            target: self,
-            selector: #selector(rotateToNextCity),
-            userInfo: nil,
+            withTimeInterval: Constants.cityRotationInterval,
             repeats: true
-        )
-    }
-
-    @objc private func rotateToNextCity() {
-        guard !selectedCities.isEmpty else { return }
-        currentCityIndex = (currentCityIndex + 1) % selectedCities.count
+        ) { [weak self] _ in
+            guard let self = self, !self.selectedCities.isEmpty else { return }
+            self.currentCityIndex = (self.currentCityIndex + 1) % self.selectedCities.count
+        }
     }
 
     @MainActor
@@ -75,9 +73,30 @@ final class CombinedAppState: ObservableObject {
     func updateSelectedCities(_ cities: [City]) {
         selectedCities = TimeZoneManager.sortCitiesByTimezone(cities)
         currentCityIndex = 0
-
-        // Fetch weather for new cities
+        saveCities()
         fetchAllWeather()
+    }
+
+    // MARK: - Persistence
+
+    private func saveCities() {
+        let codes = selectedCities.map { $0.code }
+        UserDefaults.standard.set(codes, forKey: Self.selectedCityCodesKey)
+    }
+
+    private func loadSavedCities() -> [City] {
+        guard let codes = UserDefaults.standard.stringArray(
+            forKey: Self.selectedCityCodesKey
+        ) else {
+            return TimeZoneManager.getDefaultCities()
+        }
+        let cities = codes.compactMap { code in
+            allAvailableTimezones.first { $0.code == code }
+        }
+        guard !cities.isEmpty else {
+            return TimeZoneManager.getDefaultCities()
+        }
+        return TimeZoneManager.sortCitiesByTimezone(cities)
     }
 
     // MARK: - Weather Methods
@@ -85,12 +104,11 @@ final class CombinedAppState: ObservableObject {
     private func startWeatherTimer() {
         weatherTimer?.invalidate()
         weatherTimer = Timer.scheduledTimer(
-            timeInterval: Constants.weatherUpdateInterval,
-            target: self,
-            selector: #selector(fetchAllWeather),
-            userInfo: nil,
+            withTimeInterval: Constants.weatherUpdateInterval,
             repeats: true
-        )
+        ) { [weak self] _ in
+            self?.fetchAllWeather()
+        }
     }
 
     /// Fetches weather data for all selected cities with staggered delays to avoid rate limiting.
@@ -105,7 +123,7 @@ final class CombinedAppState: ObservableObject {
     /// Weather data will appear gradually as each request completes. This is preferable
     /// to being rate-limited or banned by the API, which would prevent all weather data
     /// from loading.
-    @objc func fetchAllWeather() {
+    func fetchAllWeather() {
         // Add delays between API calls to avoid rate limiting
         for (index, city) in selectedCities.enumerated() {
             let delay = Double(index) * Constants.weatherRequestDelay

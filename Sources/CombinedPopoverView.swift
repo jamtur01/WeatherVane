@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CombinedPopoverView: View {
-    @ObservedObject var appState: CombinedAppState
+    @ObservedObject var appState: WeathervaneState
     weak var statusBarController: CombinedStatusBarController?
 
     var body: some View {

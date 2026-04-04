@@ -158,12 +158,4 @@ struct TimeZoneData {
         City(code: "YRN", timeZoneIdentifier: "Pacific/Nauru", displayName: "Yaren", emoji: "🇳🇷"),
         City(code: "TRV", timeZoneIdentifier: "Pacific/Tarawa", displayName: "Tarawa", emoji: "🇰🇮")
     ]
-    
-    static let defaultTimezones = [
-        City(code: "NYC", timeZoneIdentifier: "America/New_York", displayName: "New York", emoji: "🗽"),
-        City(code: "LHR", timeZoneIdentifier: "Europe/London", displayName: "London", emoji: "🇬🇧"),
-        City(code: "MEL", timeZoneIdentifier: "Australia/Melbourne", displayName: "Melbourne", emoji: "🇦🇺"),
-        City(code: "LAX", timeZoneIdentifier: "America/Los_Angeles", displayName: "Los Angeles", emoji: "🌴"),
-        City(code: "CHI", timeZoneIdentifier: "America/Chicago", displayName: "Chicago", emoji: "🏙️")
-    ]
 }

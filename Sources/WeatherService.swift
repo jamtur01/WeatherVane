@@ -152,9 +152,6 @@ class WeatherService {
                     pressure: currentCondition.pressure,
                     visibility: currentCondition.visibility,
                     forecasts: forecasts,
-                    isUsingLocation: false,
-                    latitude: nil,
-                    longitude: nil,
                     cityName: cityName
                 )
 

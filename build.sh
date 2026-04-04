@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Exit on error
-set -e
+# Exit on error, unset variables, and pipe failures
+set -euo pipefail
 
 # Extract version from Info.plist
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Info/Info.plist)
@@ -12,9 +12,9 @@ echo "Building Weathervane version $VERSION (build $BUILD)..."
 # Paths
 BUILD_DIR=".build"
 UNIVERSAL_OUTPUT="$BUILD_DIR/universal"
-ARM64_PATH="$BUILD_DIR/arm64-apple-macosx/release/CombinedApp"
-X86_64_PATH="$BUILD_DIR/x86_64-apple-macosx/release/CombinedApp"
-UNIVERSAL_BINARY="$UNIVERSAL_OUTPUT/CombinedApp"
+ARM64_PATH="$BUILD_DIR/arm64-apple-macosx/release/Weathervane"
+X86_64_PATH="$BUILD_DIR/x86_64-apple-macosx/release/Weathervane"
+UNIVERSAL_BINARY="$UNIVERSAL_OUTPUT/Weathervane"
 
 # Clean previous universal output
 rm -rf "$UNIVERSAL_OUTPUT"
@@ -53,8 +53,8 @@ chmod +x "$MACOS_DIR/Weathervane"
 cp Info/Info.plist "$CONTENTS_DIR/"
 
 # Sign the application
-if [ -z "$CI" ]; then
-  if [ -n "$APPLE_DEVELOPER_CERTIFICATE_P12_BASE64" ] && [ -n "$APPLE_DEVELOPER_CERTIFICATE_PASSWORD" ]; then
+if [ -z "${CI:-}" ]; then
+  if [ -n "${APPLE_DEVELOPER_CERTIFICATE_P12_BASE64:-}" ] && [ -n "${APPLE_DEVELOPER_CERTIFICATE_PASSWORD:-}" ]; then
     echo "Code signing the application with Developer ID..."
 
     KEYCHAIN_PATH=${RUNNER_TEMP:-/tmp}/app-signing.keychain-db

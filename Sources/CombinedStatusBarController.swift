@@ -5,8 +5,9 @@ final class CombinedStatusBarController {
     private var statusBar: NSStatusBar
     private var statusItem: NSStatusItem
     private var popover: NSPopover
-    private let appState = CombinedAppState()
+    private let appState = WeathervaneState()
     private var updateTimer: Timer?
+    private var eventMonitor: Any?
     weak var settingsWindow: NSWindow?
     internal var settingsWindowDelegate: NSWindowDelegate?
 
@@ -54,16 +55,17 @@ final class CombinedStatusBarController {
     private func startUpdateTimer() {
         updateTimer?.invalidate()
         updateTimer = Timer.scheduledTimer(
-            timeInterval: 1.0, // Update every second for time display
-            target: self,
-            selector: #selector(updateStatusItemTitle),
-            userInfo: nil,
+            withTimeInterval: 1.0, // Update every second for time display
             repeats: true
-        )
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateStatusItemTitle()
+            }
+        }
     }
 
     @MainActor
-    @objc private func updateStatusItemTitle() {
+    private func updateStatusItemTitle() {
         guard let currentCity = appState.currentDisplayCity else {
             statusItem.button?.title = Constants.defaultMenuBarTitle
             return
@@ -97,10 +99,19 @@ final class CombinedStatusBarController {
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: NSRectEdge.minY)
         }
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            self?.hidePopover(sender: nil)
+        }
     }
 
     func hidePopover(sender: AnyObject?) {
         popover.performClose(sender)
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
     }
 
     func openSettingsWindow() {
@@ -130,6 +141,10 @@ final class CombinedStatusBarController {
                 window.orderOut(nil)
             }
         }).environmentObject(appState)
+
+        let delegate = SettingsWindowDelegate(statusBarController: self)
+        window.delegate = delegate
+        settingsWindowDelegate = delegate
 
         window.contentViewController = NSHostingController(rootView: citySelectionView)
         window.center()

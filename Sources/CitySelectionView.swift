@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CitySelectionView: View {
-    @EnvironmentObject var appState: CombinedAppState
+    @EnvironmentObject var appState: WeathervaneState
     @State private var searchText = ""
     @State private var selectedCityCodes: Set<String> = []
     let onClose: () -> Void
@@ -183,6 +183,6 @@ struct CitySelectionRow: View {
 
 #Preview {
     CitySelectionView(onClose: {})
-        .environmentObject(CombinedAppState())
+        .environmentObject(WeathervaneState())
         .frame(width: 500, height: 600)
 }
