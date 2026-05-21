@@ -14,8 +14,16 @@ struct CombinedPopoverView: View {
                 footer
             }
         }
-        .frame(width: Constants.popoverWidth)
-        .frame(minHeight: Constants.popoverHeightMin, maxHeight: Constants.popoverHeightMax)
+        .frame(width: Constants.popoverWidth, height: popoverHeight)
+    }
+
+    private var popoverHeight: CGFloat {
+        if appState.selectedCities.isEmpty {
+            return Constants.popoverHeightMin
+        }
+        let rowsHeight = CGFloat(appState.selectedCities.count) * Constants.estimatedRowHeight
+        let total = rowsHeight + Constants.footerHeight + 24
+        return min(max(total, Constants.popoverHeightMin), Constants.popoverHeightMax)
     }
 
     @ViewBuilder
