@@ -27,8 +27,13 @@ enum Constants {
     static let maxCitiesToDisplay = 50
 
     // Date formatting
-    static let shortTimeFormat = "h:mm a"
-    static let longTimeFormat = "EEE h:mm a"
+    static let shortTimeFormat12 = "h:mm a"
+    static let shortTimeFormat24 = "HH:mm"
+    static let longTimeFormat12 = "EEE h:mm a"
+    static let longTimeFormat24 = "EEE HH:mm"
+    static let rowDateFormat = "EEE MMM d"
+    static let bigTimeFormat12 = "h:mm a"
+    static let bigTimeFormat24 = "HH:mm"
     static let defaultLocaleIdentifier = "en_US"
 
     // UserDefaults keys

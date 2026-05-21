@@ -7,7 +7,10 @@ final class WeathervaneState: ObservableObject {
     // Time zone state
     @Published var selectedCities: [City] = []
     @Published var currentCityIndex = 0
-    @Published var timeSliderOffset: TimeInterval = 0
+    @Published var virtualNow: Date? = nil
+
+    var effectiveNow: Date { virtualNow ?? Date() }
+    var isVirtualTime: Bool { virtualNow != nil }
 
     // Weather state - per city
     @Published var weatherDataByCity: [String: WeatherData] = [:]
@@ -62,23 +65,23 @@ final class WeathervaneState: ObservableObject {
     }
 
     @MainActor
-    func getTimeString(for city: City, useSliderTime: Bool = false, shortFormat: Bool = false) -> String {
-        let baseDate = useSliderTime ? Date().addingTimeInterval(timeSliderOffset) : Date()
+    func getTimeString(for city: City, shortFormat: Bool = false) -> String {
+        let baseDate = effectiveNow
         return shortFormat
-            ? DateFormatterManager.formatShortTime(for: city, date: baseDate)
-            : DateFormatterManager.formatLongTime(for: city, date: baseDate)
+            ? DateFormatterManager.formatShortTime(for: city, date: baseDate, use24Hour: use24HourTime)
+            : DateFormatterManager.formatLongTime(for: city, date: baseDate, use24Hour: use24HourTime)
     }
 
-    func previousHour() {
-        timeSliderOffset -= Constants.secondsPerHour
+    func setVirtualNow(_ date: Date) {
+        virtualNow = date
     }
 
-    func nextHour() {
-        timeSliderOffset += Constants.secondsPerHour
+    func adjustVirtualNow(by seconds: TimeInterval) {
+        virtualNow = (virtualNow ?? Date()).addingTimeInterval(seconds)
     }
 
     func resetTime() {
-        timeSliderOffset = 0
+        virtualNow = nil
     }
 
     func updateSelectedCities(_ cities: [City]) {
