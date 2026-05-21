@@ -11,8 +11,23 @@ enum Constants {
     static let secondsPerHour: TimeInterval = 3600
 
     // UI dimensions
-    static let popoverWidth: CGFloat = 380
-    static let popoverHeight: CGFloat = 550
+    static let popoverWidth: CGFloat = 400
+    static let popoverHeightMax: CGFloat = 830
+    static let popoverHeightMin: CGFloat = 220
+    static let popoverDefaultHeight: CGFloat = 640
+    static let estimatedRowHeight: CGFloat = 138
+    static let footerHeight: CGFloat = 110
+
+    // Row dimensions
+    static let rowSpacing: CGFloat = 8
+    static let rowCornerRadius: CGFloat = 10
+    static let rowHorizontalPadding: CGFloat = 14
+    static let rowVerticalPadding: CGFloat = 12
+
+    // Slider (DayNightBar)
+    static let dayNightBarHeight: CGFloat = 24
+    static let dayNightBarMarkerSize: CGFloat = 24
+    static let dayNightBarTickCount: Int = 97
     static let settingsWindowWidth: CGFloat = 500
     static let settingsWindowHeight: CGFloat = 600
 
@@ -27,9 +42,18 @@ enum Constants {
     static let maxCitiesToDisplay = 50
 
     // Date formatting
-    static let shortTimeFormat = "h:mm a"
-    static let longTimeFormat = "EEE h:mm a"
+    static let shortTimeFormat12 = "h:mm a"
+    static let shortTimeFormat24 = "HH:mm"
+    static let longTimeFormat12 = "EEE h:mm a"
+    static let longTimeFormat24 = "EEE HH:mm"
+    static let rowDateFormat = "EEE MMM d"
+    static let bigTimeFormat12 = "h:mm a"
+    static let bigTimeFormat24 = "HH:mm"
     static let defaultLocaleIdentifier = "en_US"
+
+    // UserDefaults keys
+    static let use24HourTimeKey = "use24HourTime"
+    static let defaultUse24Hour = true
 
     // Button labels
     static let quitButtonLabel = "Quit"

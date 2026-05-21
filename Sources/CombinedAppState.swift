@@ -7,16 +7,40 @@ final class WeathervaneState: ObservableObject {
     // Time zone state
     @Published var selectedCities: [City] = []
     @Published var currentCityIndex = 0
-    @Published var timeSliderOffset: TimeInterval = 0
+    @Published var virtualNow: Date? = nil {
+        didSet {
+            if virtualNow == nil {
+                startLiveTickTimer()
+            } else {
+                stopLiveTickTimer()
+            }
+        }
+    }
+
+    var effectiveNow: Date { virtualNow ?? Date() }
+    var isVirtualTime: Bool { virtualNow != nil }
 
     // Weather state - per city
     @Published var weatherDataByCity: [String: WeatherData] = [:]
     @Published var loadingCities: Set<String> = []
     @Published var errorsByCity: [String: String] = [:]
 
+    @Published var use24HourTime: Bool = {
+        if UserDefaults.standard.object(forKey: Constants.use24HourTimeKey) == nil {
+            return Constants.defaultUse24Hour
+        }
+        return UserDefaults.standard.bool(forKey: Constants.use24HourTimeKey)
+    }() {
+        didSet {
+            UserDefaults.standard.set(use24HourTime, forKey: Constants.use24HourTimeKey)
+        }
+    }
+
     private let weatherService = WeatherService.shared
     private var weatherTimer: Timer?
     private var cityRotationTimer: Timer?
+    private var liveTickTimer: Timer?
+    private var isPopoverOpen = false
 
     let allAvailableTimezones = TimeZoneManager.getAllAvailableCities()
 
@@ -35,6 +59,7 @@ final class WeathervaneState: ObservableObject {
     deinit {
         weatherTimer?.invalidate()
         cityRotationTimer?.invalidate()
+        liveTickTimer?.invalidate()
     }
 
     // MARK: - Time Zone Methods
@@ -51,23 +76,56 @@ final class WeathervaneState: ObservableObject {
     }
 
     @MainActor
-    func getTimeString(for city: City, useSliderTime: Bool = false, shortFormat: Bool = false) -> String {
-        let baseDate = useSliderTime ? Date().addingTimeInterval(timeSliderOffset) : Date()
+    func getTimeString(for city: City, shortFormat: Bool = false) -> String {
+        let baseDate = effectiveNow
         return shortFormat
-            ? DateFormatterManager.formatShortTime(for: city, date: baseDate)
-            : DateFormatterManager.formatLongTime(for: city, date: baseDate)
+            ? DateFormatterManager.formatShortTime(for: city, date: baseDate, use24Hour: use24HourTime)
+            : DateFormatterManager.formatLongTime(for: city, date: baseDate, use24Hour: use24HourTime)
     }
 
-    func previousHour() {
-        timeSliderOffset -= Constants.secondsPerHour
+    @MainActor
+    func setVirtualNow(_ date: Date) {
+        virtualNow = date
     }
 
-    func nextHour() {
-        timeSliderOffset += Constants.secondsPerHour
+    @MainActor
+    func adjustVirtualNow(by seconds: TimeInterval) {
+        virtualNow = (virtualNow ?? Date()).addingTimeInterval(seconds)
     }
 
+    @MainActor
     func resetTime() {
-        timeSliderOffset = 0
+        virtualNow = nil
+    }
+
+    @MainActor
+    func popoverDidOpen() {
+        isPopoverOpen = true
+        startLiveTickTimer()
+    }
+
+    @MainActor
+    func popoverDidClose() {
+        isPopoverOpen = false
+        stopLiveTickTimer()
+    }
+
+    private func startLiveTickTimer() {
+        guard isPopoverOpen, virtualNow == nil else {
+            stopLiveTickTimer()
+            return
+        }
+        liveTickTimer?.invalidate()
+        liveTickTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.objectWillChange.send()
+            }
+        }
+    }
+
+    private func stopLiveTickTimer() {
+        liveTickTimer?.invalidate()
+        liveTickTimer = nil
     }
 
     func updateSelectedCities(_ cities: [City]) {

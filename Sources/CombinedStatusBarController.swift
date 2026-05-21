@@ -36,12 +36,14 @@ final class CombinedStatusBarController {
     }
 
     private func setupPopover() {
-        popover.contentSize = NSSize(width: Constants.popoverWidth, height: Constants.popoverHeight)
+        popover.contentSize = NSSize(width: Constants.popoverWidth, height: Constants.popoverDefaultHeight)
         popover.behavior = .applicationDefined
         popover.animates = true
-        popover.contentViewController = NSHostingController(
+        let hosting = NSHostingController(
             rootView: CombinedPopoverView(appState: appState, statusBarController: self)
         )
+        hosting.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = hosting
     }
 
     private func setupStatusItem() {
@@ -81,7 +83,7 @@ final class CombinedStatusBarController {
         }
 
         // Add time info
-        let timeString = appState.getTimeString(for: currentCity, useSliderTime: false, shortFormat: true)
+        let timeString = appState.getTimeString(for: currentCity, shortFormat: true)
         titleComponents.append("\(currentCity.emoji) \(currentCity.code) \(timeString)")
 
         statusItem.button?.title = titleComponents.joined(separator: " | ")
@@ -99,6 +101,9 @@ final class CombinedStatusBarController {
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: NSRectEdge.minY)
         }
+        Task { @MainActor in
+            appState.popoverDidOpen()
+        }
         eventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in
@@ -108,6 +113,9 @@ final class CombinedStatusBarController {
 
     func hidePopover(sender: AnyObject?) {
         popover.performClose(sender)
+        Task { @MainActor in
+            appState.popoverDidClose()
+        }
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil

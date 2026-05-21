@@ -1,35 +1,24 @@
 import Foundation
 
-/// Centralized date formatter management to avoid creating multiple instances
-/// and improve performance across the application
+/// Centralized date formatter management.
 final class DateFormatterManager {
 
     private static let lock = NSLock()
 
-    /// Shared long format date formatter (e.g., "Mon 3:45 PM")
-    static let longFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: Constants.defaultLocaleIdentifier)
-        formatter.dateFormat = Constants.longTimeFormat
-        return formatter
-    }()
+    private static let shortFormatter12: DateFormatter = makeFormatter(Constants.shortTimeFormat12)
+    private static let shortFormatter24: DateFormatter = makeFormatter(Constants.shortTimeFormat24)
+    private static let longFormatter12: DateFormatter = makeFormatter(Constants.longTimeFormat12)
+    private static let longFormatter24: DateFormatter = makeFormatter(Constants.longTimeFormat24)
+    private static let rowDateFormatter: DateFormatter = makeFormatter(Constants.rowDateFormat)
+    private static let bigTimeFormatter12: DateFormatter = makeFormatter(Constants.bigTimeFormat12)
+    private static let bigTimeFormatter24: DateFormatter = makeFormatter(Constants.bigTimeFormat24)
 
-    /// Shared short format date formatter (e.g., "3:45 PM")
-    static let shortFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: Constants.defaultLocaleIdentifier)
-        formatter.dateFormat = Constants.shortTimeFormat
-        return formatter
-    }()
-
-    /// Shared formatter for forecast dates (yyyy-MM-dd format)
     static let forecastDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
 
-    /// Shared formatter for day-of-week display (e.g., "Mon", "Tue")
     static let dayOfWeekFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE"
@@ -38,27 +27,42 @@ final class DateFormatterManager {
 
     private init() {}
 
-    /// Thread-safe helper to set timezone on formatter and get formatted string
-    static func formatTime(
-        for city: City,
-        using formatter: DateFormatter,
-        date: Date = Date()
-    ) -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        formatter.timeZone = city.timeZone
-        return formatter.string(from: date)
+    private static func makeFormatter(_ format: String) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: Constants.defaultLocaleIdentifier)
+        formatter.dateFormat = format
+        return formatter
     }
 
-    static func formatShortTime(for city: City, date: Date = Date()) -> String {
-        return formatTime(for: city, using: shortFormatter, date: date)
+    static func formatShortTime(for city: City, date: Date = Date(), use24Hour: Bool = true) -> String {
+        return format(date: date, timeZone: city.timeZone, using: use24Hour ? shortFormatter24 : shortFormatter12)
     }
 
-    static func formatLongTime(for city: City, date: Date = Date()) -> String {
-        return formatTime(for: city, using: longFormatter, date: date)
+    static func formatLongTime(for city: City, date: Date = Date(), use24Hour: Bool = true) -> String {
+        return format(date: date, timeZone: city.timeZone, using: use24Hour ? longFormatter24 : longFormatter12)
     }
 
-    /// Format forecast date as "Today", "Tomorrow", or day of week (e.g., "Mon")
+    static func formatBigTime(for city: City, date: Date = Date(), use24Hour: Bool = true) -> String {
+        return format(date: date, timeZone: city.timeZone, using: use24Hour ? bigTimeFormatter24 : bigTimeFormatter12)
+    }
+
+    static func formatRowDate(for city: City, date: Date = Date()) -> String {
+        return format(date: date, timeZone: city.timeZone, using: rowDateFormatter)
+    }
+
+    static func formatGMTOffset(for city: City, date: Date = Date()) -> String {
+        let offset = city.timeZone.secondsFromGMT(for: date)
+        let totalMinutes = offset / 60
+        let sign = totalMinutes < 0 ? "-" : "+"
+        let absMinutes = abs(totalMinutes)
+        let hours = absMinutes / 60
+        let minutes = absMinutes % 60
+        if minutes == 0 {
+            return "GMT\(sign)\(hours)"
+        }
+        return "GMT\(sign)\(hours):\(String(format: "%02d", minutes))"
+    }
+
     static func formatForecastDate(_ dateString: String) -> String {
         lock.lock()
         let date = forecastDateFormatter.date(from: dateString)
@@ -74,10 +78,16 @@ final class DateFormatterManager {
             return "Today"
         } else if calendar.isDate(date, inSameDayAs: tomorrow) {
             return "Tomorrow"
-        } else {
-            lock.lock()
-            defer { lock.unlock() }
-            return dayOfWeekFormatter.string(from: date)
         }
+        lock.lock()
+        defer { lock.unlock() }
+        return dayOfWeekFormatter.string(from: date)
+    }
+
+    private static func format(date: Date, timeZone: TimeZone, using formatter: DateFormatter) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        formatter.timeZone = timeZone
+        return formatter.string(from: date)
     }
 }

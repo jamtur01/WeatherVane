@@ -26,13 +26,19 @@ struct CitySelectionView: View {
         VStack(alignment: .leading, spacing: 16) {
             // Header
             VStack(alignment: .leading, spacing: 8) {
-                Text("Select Cities")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Text("Choose cities to display in your timezone list:")
-                    .font(.body)
-                    .foregroundColor(.secondary)
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Select Cities")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        Text("Choose cities to display in your timezone list:")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Toggle("24-hour time", isOn: $appState.use24HourTime)
+                        .toggleStyle(.switch)
+                }
             }
             
             // Search field
