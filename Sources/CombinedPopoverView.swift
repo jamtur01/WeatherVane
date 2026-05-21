@@ -28,7 +28,7 @@ struct CombinedPopoverView: View {
                         CityWeatherRow(
                             city: city,
                             weather: appState.getWeather(for: city),
-                            timeString: appState.getTimeString(for: city, useSliderTime: true),
+                            timeString: appState.getTimeString(for: city),
                             isLoading: appState.isLoading(for: city),
                             error: appState.getError(for: city),
                             onRetry: {
@@ -41,12 +41,12 @@ struct CombinedPopoverView: View {
                 .padding(.vertical, 12)
             }
 
-            if appState.timeSliderOffset != 0 {
+            if appState.isVirtualTime {
                 Divider()
                 HStack {
                     Image(systemName: "clock.arrow.circlepath")
                         .foregroundColor(.blue)
-                    Text("Time offset: \(Int(appState.timeSliderOffset / Constants.secondsPerHour))h")
+                    Text("Virtual time active")
                         .font(.caption)
                         .foregroundColor(.blue)
                 }
@@ -57,11 +57,8 @@ struct CombinedPopoverView: View {
 
             // Controls
             VStack(spacing: 8) {
-                // Time Controls
                 HStack {
-                    Button("← Hour") { appState.previousHour() }
                     Button(Constants.resetButtonLabel) { appState.resetTime() }
-                    Button("Hour →") { appState.nextHour() }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)

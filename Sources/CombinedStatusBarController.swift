@@ -81,7 +81,7 @@ final class CombinedStatusBarController {
         }
 
         // Add time info
-        let timeString = appState.getTimeString(for: currentCity, useSliderTime: false, shortFormat: true)
+        let timeString = appState.getTimeString(for: currentCity, shortFormat: true)
         titleComponents.append("\(currentCity.emoji) \(currentCity.code) \(timeString)")
 
         statusItem.button?.title = titleComponents.joined(separator: " | ")
