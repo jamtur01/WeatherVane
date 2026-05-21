@@ -12,7 +12,7 @@ enum Constants {
 
     // UI dimensions
     static let popoverWidth: CGFloat = 400
-    static let popoverHeightMax: CGFloat = 860
+    static let popoverHeightMax: CGFloat = 830
     static let popoverHeightMin: CGFloat = 220
     static let popoverDefaultHeight: CGFloat = 640
     static let estimatedRowHeight: CGFloat = 138
