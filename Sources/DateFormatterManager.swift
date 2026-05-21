@@ -52,12 +52,15 @@ final class DateFormatterManager {
 
     static func formatGMTOffset(for city: City, date: Date = Date()) -> String {
         let offset = city.timeZone.secondsFromGMT(for: date)
-        let hours = offset / 3600
-        let minutes = abs(offset % 3600) / 60
+        let totalMinutes = offset / 60
+        let sign = totalMinutes < 0 ? "-" : "+"
+        let absMinutes = abs(totalMinutes)
+        let hours = absMinutes / 60
+        let minutes = absMinutes % 60
         if minutes == 0 {
-            return "GMT\(hours >= 0 ? "+" : "")\(hours)"
+            return "GMT\(sign)\(hours)"
         }
-        return String(format: "GMT%+d:%02d", hours, minutes)
+        return "GMT\(sign)\(hours):\(String(format: "%02d", minutes))"
     }
 
     static func formatForecastDate(_ dateString: String) -> String {

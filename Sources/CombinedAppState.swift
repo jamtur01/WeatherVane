@@ -72,14 +72,17 @@ final class WeathervaneState: ObservableObject {
             : DateFormatterManager.formatLongTime(for: city, date: baseDate, use24Hour: use24HourTime)
     }
 
+    @MainActor
     func setVirtualNow(_ date: Date) {
         virtualNow = date
     }
 
+    @MainActor
     func adjustVirtualNow(by seconds: TimeInterval) {
         virtualNow = (virtualNow ?? Date()).addingTimeInterval(seconds)
     }
 
+    @MainActor
     func resetTime() {
         virtualNow = nil
     }
