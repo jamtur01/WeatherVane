@@ -36,7 +36,7 @@ final class CombinedStatusBarController {
     }
 
     private func setupPopover() {
-        popover.contentSize = NSSize(width: Constants.popoverWidth, height: Constants.popoverHeight)
+        popover.contentSize = NSSize(width: Constants.popoverWidth, height: Constants.popoverHeightMin)
         popover.behavior = .applicationDefined
         popover.animates = true
         popover.contentViewController = NSHostingController(

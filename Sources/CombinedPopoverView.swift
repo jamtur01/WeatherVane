@@ -72,7 +72,7 @@ struct CombinedPopoverView: View {
             }
             .padding(Constants.defaultPadding)
         }
-        .frame(width: Constants.popoverWidth, height: Constants.popoverHeight)
+        .frame(width: Constants.popoverWidth, height: Constants.popoverHeightMin)
     }
 }
 
