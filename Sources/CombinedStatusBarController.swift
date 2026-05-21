@@ -99,6 +99,9 @@ final class CombinedStatusBarController {
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: NSRectEdge.minY)
         }
+        Task { @MainActor in
+            appState.popoverDidOpen()
+        }
         eventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in
@@ -108,6 +111,9 @@ final class CombinedStatusBarController {
 
     func hidePopover(sender: AnyObject?) {
         popover.performClose(sender)
+        Task { @MainActor in
+            appState.popoverDidClose()
+        }
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil

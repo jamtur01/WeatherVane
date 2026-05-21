@@ -7,7 +7,15 @@ final class WeathervaneState: ObservableObject {
     // Time zone state
     @Published var selectedCities: [City] = []
     @Published var currentCityIndex = 0
-    @Published var virtualNow: Date? = nil
+    @Published var virtualNow: Date? = nil {
+        didSet {
+            if virtualNow == nil {
+                startLiveTickTimer()
+            } else {
+                stopLiveTickTimer()
+            }
+        }
+    }
 
     var effectiveNow: Date { virtualNow ?? Date() }
     var isVirtualTime: Bool { virtualNow != nil }
@@ -31,6 +39,8 @@ final class WeathervaneState: ObservableObject {
     private let weatherService = WeatherService.shared
     private var weatherTimer: Timer?
     private var cityRotationTimer: Timer?
+    private var liveTickTimer: Timer?
+    private var isPopoverOpen = false
 
     let allAvailableTimezones = TimeZoneManager.getAllAvailableCities()
 
@@ -49,6 +59,7 @@ final class WeathervaneState: ObservableObject {
     deinit {
         weatherTimer?.invalidate()
         cityRotationTimer?.invalidate()
+        liveTickTimer?.invalidate()
     }
 
     // MARK: - Time Zone Methods
@@ -85,6 +96,36 @@ final class WeathervaneState: ObservableObject {
     @MainActor
     func resetTime() {
         virtualNow = nil
+    }
+
+    @MainActor
+    func popoverDidOpen() {
+        isPopoverOpen = true
+        startLiveTickTimer()
+    }
+
+    @MainActor
+    func popoverDidClose() {
+        isPopoverOpen = false
+        stopLiveTickTimer()
+    }
+
+    private func startLiveTickTimer() {
+        guard isPopoverOpen, virtualNow == nil else {
+            stopLiveTickTimer()
+            return
+        }
+        liveTickTimer?.invalidate()
+        liveTickTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.objectWillChange.send()
+            }
+        }
+    }
+
+    private func stopLiveTickTimer() {
+        liveTickTimer?.invalidate()
+        liveTickTimer = nil
     }
 
     func updateSelectedCities(_ cities: [City]) {
