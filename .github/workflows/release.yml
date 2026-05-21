@@ -9,7 +9,7 @@ jobs:
   lint:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: Run SwiftLint
@@ -19,7 +19,7 @@ jobs:
     needs: lint
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build
         run: swift build -v
       - name: Run tests
@@ -31,7 +31,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up signing certificate
         env:
@@ -81,7 +81,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ steps.get_version.outputs.VERSION }}
           draft: false
