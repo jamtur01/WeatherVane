@@ -14,6 +14,17 @@ final class WeathervaneState: ObservableObject {
     @Published var loadingCities: Set<String> = []
     @Published var errorsByCity: [String: String] = [:]
 
+    @Published var use24HourTime: Bool = {
+        if UserDefaults.standard.object(forKey: Constants.use24HourTimeKey) == nil {
+            return Constants.defaultUse24Hour
+        }
+        return UserDefaults.standard.bool(forKey: Constants.use24HourTimeKey)
+    }() {
+        didSet {
+            UserDefaults.standard.set(use24HourTime, forKey: Constants.use24HourTimeKey)
+        }
+    }
+
     private let weatherService = WeatherService.shared
     private var weatherTimer: Timer?
     private var cityRotationTimer: Timer?

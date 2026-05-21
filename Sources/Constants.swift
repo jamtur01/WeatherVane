@@ -31,6 +31,10 @@ enum Constants {
     static let longTimeFormat = "EEE h:mm a"
     static let defaultLocaleIdentifier = "en_US"
 
+    // UserDefaults keys
+    static let use24HourTimeKey = "use24HourTime"
+    static let defaultUse24Hour = true
+
     // Button labels
     static let quitButtonLabel = "Quit"
     static let cancelButtonLabel = "Cancel"
