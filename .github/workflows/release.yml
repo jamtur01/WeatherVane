@@ -23,7 +23,7 @@ jobs:
       - name: Build
         run: swift build -v
       - name: Run tests
-        run: swift test -v || echo "No tests configured, skipping..."
+        run: swift test -v
 
   create-release:
     needs: build-and-test
