@@ -28,6 +28,8 @@ enum Constants {
     static let dayNightBarHeight: CGFloat = 24
     static let dayNightBarMarkerSize: CGFloat = 24
     static let dayNightBarTickCount: Int = 97
+    // Movement (points) before a press is treated as a drag rather than a tap.
+    static let dayNightBarDragThreshold: CGFloat = 5
     static let settingsWindowWidth: CGFloat = 500
     static let settingsWindowHeight: CGFloat = 600
 

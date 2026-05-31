@@ -1,12 +1,16 @@
 import SwiftUI
 import Foundation
+import os
 
 final class WeathervaneState: ObservableObject {
     private static let selectedCityCodesKey = "selectedCityCodes"
+    private let logger = Logger(subsystem: "net.lovedthanlost.weathervane", category: "state")
 
     // Time zone state
     @Published var selectedCities: [City] = []
-    @Published var currentCityIndex = 0
+    // Drives the rotating menu-bar title only; read directly (not via Combine),
+    // so it is intentionally not @Published to avoid re-rendering the popover.
+    var currentCityIndex = 0
     @Published var virtualNow: Date? = nil {
         didSet {
             if virtualNow == nil {
@@ -107,7 +111,7 @@ final class WeathervaneState: ObservableObject {
     @MainActor
     func popoverDidClose() {
         isPopoverOpen = false
-        stopLiveTickTimer()
+        resetTime()
     }
 
     private func startLiveTickTimer() {
@@ -229,8 +233,7 @@ final class WeathervaneState: ObservableObject {
                 case .failure(let initialError):
                     // Try fallback query
                     let fallbackQuery = self.getWeatherQuery(for: city, useCode: true)
-                    print("⚠️ Weather fetch failed for '\(city.displayName)' using query '\(query)' (error: \(initialError.localizedDescription))")
-                    print("🔄 Trying fallback query: '\(fallbackQuery)'")
+                    self.logger.warning("Weather fetch failed for '\(city.displayName, privacy: .public)' using query '\(query, privacy: .public)' (\(initialError.localizedDescription, privacy: .public)); trying fallback '\(fallbackQuery, privacy: .public)'")
 
                     self.weatherService.fetchWeather(cityName: fallbackQuery) { [weak self] fallbackResult in
                         guard let self = self else { return }
@@ -242,12 +245,10 @@ final class WeathervaneState: ObservableObject {
                             case .success(let data):
                                 self.weatherDataByCity[cityKey] = data
                                 self.errorsByCity.removeValue(forKey: cityKey)
-                                print("✅ Fallback successful for '\(city.displayName)' using query '\(fallbackQuery)'")
+                                self.logger.info("Fallback succeeded for '\(city.displayName, privacy: .public)' using query '\(fallbackQuery, privacy: .public)'")
                             case .failure(let error):
                                 self.errorsByCity[cityKey] = error.localizedDescription
-                                print("❌ Both fetch attempts failed for '\(city.displayName)':")
-                                print("   First attempt ('\(query)'): \(initialError.localizedDescription)")
-                                print("   Second attempt ('\(fallbackQuery)'): \(error.localizedDescription)")
+                                self.logger.error("Both fetch attempts failed for '\(city.displayName, privacy: .public)': '\(query, privacy: .public)' (\(initialError.localizedDescription, privacy: .public)), '\(fallbackQuery, privacy: .public)' (\(error.localizedDescription, privacy: .public))")
                             }
                         }
                     }

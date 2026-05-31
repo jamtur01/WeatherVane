@@ -17,7 +17,12 @@ let package = Package(
         .executableTarget(
             name: "Weathervane",
             dependencies: [],
-            path: "Sources"
+            path: "Sources",
+            exclude: ["CLAUDE.md"]
+        ),
+        .testTarget(
+            name: "WeathervaneTests",
+            dependencies: ["Weathervane"]
         )
     ]
 )

@@ -8,7 +8,7 @@ final class CombinedStatusBarController {
     private let appState = WeathervaneState()
     private var updateTimer: Timer?
     private var eventMonitor: Any?
-    weak var settingsWindow: NSWindow?
+    var settingsWindow: NSWindow?
     internal var settingsWindowDelegate: NSWindowDelegate?
 
     init() {
@@ -123,6 +123,11 @@ final class CombinedStatusBarController {
     }
 
     func openSettingsWindow() {
+        // Dismiss the popover so it doesn't linger behind the settings window.
+        if popover.isShown {
+            hidePopover(sender: nil)
+        }
+
         // If settings window is already open, just bring it to front
         if let existingWindow = settingsWindow, existingWindow.isVisible {
             existingWindow.makeKeyAndOrderFront(nil)
@@ -139,15 +144,12 @@ final class CombinedStatusBarController {
             backing: .buffered,
             defer: false
         )
+        window.isReleasedWhenClosed = false
         window.title = "Settings"
         window.minSize = NSSize(width: Constants.settingsWindowWidth, height: Constants.settingsWindowHeight)
 
         let citySelectionView = CitySelectionView(onClose: { [weak self] in
-            DispatchQueue.main.async {
-                self?.settingsWindow = nil
-                self?.settingsWindowDelegate = nil
-                window.orderOut(nil)
-            }
+            self?.settingsWindow?.close()
         }).environmentObject(appState)
 
         let delegate = SettingsWindowDelegate(statusBarController: self)

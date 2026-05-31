@@ -65,7 +65,8 @@ struct CitySelectionView: View {
             // City list
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(filteredCities.prefix(Constants.maxCitiesToDisplay)), id: \.code) { city in
+                    let displayedCities = Array(filteredCities.prefix(Constants.maxCitiesToDisplay))
+                    ForEach(Array(displayedCities.enumerated()), id: \.element.code) { index, city in
                         CitySelectionRow(
                             city: city,
                             isSelected: selectedCityCodes.contains(city.code)
@@ -77,8 +78,8 @@ struct CitySelectionView: View {
                             }
                         }
                         .padding(.horizontal, 4)
-                        
-                        if city.timeZoneIdentifier != filteredCities.prefix(Constants.maxCitiesToDisplay).last?.timeZoneIdentifier {
+
+                        if index < displayedCities.count - 1 {
                             Divider()
                                 .padding(.leading, 40)
                         }

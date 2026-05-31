@@ -8,6 +8,7 @@ struct DayNightBar: View {
     var onReset: () -> Void
 
     @State private var lastTapTime: Date = .distantPast
+    @State private var isDragging = false
 
     private let totalHeight: CGFloat = Constants.dayNightBarHeight
     private let markerSize: CGFloat = Constants.dayNightBarMarkerSize
@@ -77,6 +78,12 @@ struct DayNightBar: View {
     private func dragGesture(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
+                // Ignore a press until it actually moves, so a tap doesn't silently
+                // enter virtual time. Once dragging starts it stays active.
+                let moved = hypot(value.translation.width, value.translation.height)
+                guard isDragging || moved >= Constants.dayNightBarDragThreshold else { return }
+                isDragging = true
+
                 let fraction = max(0, min(value.location.x / width, 1.0))
                 let targetHour = fraction * 24.0
 
@@ -89,8 +96,9 @@ struct DayNightBar: View {
                 onDrag(snapped)
             }
             .onEnded { value in
-                let dragDistance = sqrt(pow(value.translation.width, 2) + pow(value.translation.height, 2))
-                if dragDistance < 5 {
+                isDragging = false
+                let dragDistance = hypot(value.translation.width, value.translation.height)
+                if dragDistance < Constants.dayNightBarDragThreshold {
                     let now = Date()
                     if now.timeIntervalSince(lastTapTime) < 0.3 {
                         onReset()

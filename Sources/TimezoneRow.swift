@@ -20,8 +20,9 @@ struct TimezoneRow: View {
     private let weatherService = WeatherService.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headerRow
+        let shiftColor = Self.shiftColor(for: dayOffset)
+        return VStack(alignment: .leading, spacing: 10) {
+            headerRow(dateColor: shiftColor ?? .secondary, timeColor: shiftColor ?? .primary)
             DayNightBar(
                 timeZone: city.timeZone,
                 effectiveNow: effectiveNow,
@@ -37,7 +38,7 @@ struct TimezoneRow: View {
         .onAppear { colonVisible = false }
     }
 
-    private var headerRow: some View {
+    private func headerRow(dateColor: Color, timeColor: Color) -> some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(city.displayName)
@@ -62,11 +63,11 @@ struct TimezoneRow: View {
                 }
             }
             Spacer()
-            bigTimeView
+            bigTimeView(timeColor: timeColor)
         }
     }
 
-    private var bigTimeView: some View {
+    private func bigTimeView(timeColor: Color) -> some View {
         let timeString = DateFormatterManager.formatBigTime(for: city, date: effectiveNow, use24Hour: use24Hour)
         let parts = timeString.split(separator: ":", maxSplits: 1).map(String.init)
         let hour = parts.first ?? timeString
@@ -87,6 +88,14 @@ struct TimezoneRow: View {
                 .monospacedDigit()
         }
         .foregroundColor(timeColor)
+    }
+
+    private static func shiftColor(for offset: Int) -> Color? {
+        switch offset {
+        case ..<0: return Color(red: 0.78, green: 0.0, blue: 0.0)
+        case 1...: return Color(red: 0.0, green: 0.47, blue: 0.0)
+        default: return nil
+        }
     }
 
     private var weatherSection: some View {
@@ -273,21 +282,5 @@ struct TimezoneRow: View {
             return 0
         }
         return localCal.dateComponents([.day], from: localDate, to: remoteDate).day ?? 0
-    }
-
-    private var dateColor: Color {
-        switch dayOffset {
-        case ..<0: return Color(red: 0.78, green: 0.0, blue: 0.0)
-        case 1...: return Color(red: 0.0, green: 0.47, blue: 0.0)
-        default: return .secondary
-        }
-    }
-
-    private var timeColor: Color {
-        switch dayOffset {
-        case ..<0: return Color(red: 0.78, green: 0.0, blue: 0.0)
-        case 1...: return Color(red: 0.0, green: 0.47, blue: 0.0)
-        default: return .primary
-        }
     }
 }

@@ -16,18 +16,16 @@ struct CurrentCondition: Codable {
     let weatherDesc: [WeatherDesc]
     let feelsLikeC: String
     let humidity: String
-    let chanceOfRain: String?
     let windspeedKmph: String
     let winddir16Point: String
     let pressure: String
     let visibility: String
-    
+
     enum CodingKeys: String, CodingKey {
         case tempC = "temp_C"
         case weatherDesc = "weatherDesc"
         case feelsLikeC = "FeelsLikeC"
         case humidity
-        case chanceOfRain = "chanceofrain"
         case windspeedKmph
         case winddir16Point
         case pressure
@@ -56,4 +54,10 @@ struct Weather: Codable {
 
 struct Hourly: Codable {
     let weatherDesc: [WeatherDesc]
+    let chanceOfRain: String?
+
+    enum CodingKeys: String, CodingKey {
+        case weatherDesc
+        case chanceOfRain = "chanceofrain"
+    }
 }

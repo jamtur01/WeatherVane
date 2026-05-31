@@ -1,0 +1,16 @@
+# Swift Package Manager
+.build/
+
+# Build output
+Weathervane.app/
+*.zip
+
+# Signing / notarization artifacts (created in CI)
+certificate.p12
+
+# Editor
+.vscode/
+.DS_Store
+
+# Generated claude-mem context
+Sources/CLAUDE.md

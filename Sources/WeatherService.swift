@@ -1,16 +1,18 @@
 import Foundation
+import os
 
 class WeatherService {
     static let shared = WeatherService()
 
     private let urlSession: URLSession
     private let baseURL = "https://wttr.in"
-    
+    private let logger = Logger(subsystem: "net.lovedthanlost.weathervane", category: "weather")
+
     // Hourly forecast index representing midday (around noon)
     // wttr.in provides hourly data in 3-hour intervals starting at midnight
     // Index 4 represents approximately 12:00 PM, providing a representative
     // forecast for the overall day's conditions
-    private let middayForecastIndex = 4
+    private static let middayForecastIndex = 4
 
     // Simple weather emoji mappings
     private let weatherEmojis: [String: String] = [
@@ -94,7 +96,7 @@ class WeatherService {
             // Check if response is an error message
             if let responseString = String(data: data, encoding: .utf8),
                responseString.lowercased().contains("unknown location") {
-                print("❌ wttr.in returned 'unknown location' for query: \(cityName)")
+                self.logger.warning("wttr.in returned 'unknown location' for query: \(cityName, privacy: .public)")
                 completion(.failure(NetworkError.invalidWeatherData))
                 return
             }
@@ -102,71 +104,90 @@ class WeatherService {
             do {
                 let weatherResponse = try JSONDecoder().decode(WeatherResponse.self, from: data)
 
-                guard let currentCondition = weatherResponse.currentCondition.first,
-                      let weatherDesc = currentCondition.weatherDesc.first?.value,
-                      let tempC = Double(currentCondition.tempC),
-                      let feelsLike = Double(currentCondition.feelsLikeC),
-                      let humidity = Int(currentCondition.humidity),
-                      let areaName = weatherResponse.nearestArea.first?.areaName.first?.value else {
+                guard let weatherData = Self.makeWeatherData(from: weatherResponse, cityName: cityName) else {
                     completion(.failure(NetworkError.invalidWeatherData))
                     return
                 }
 
-                let chanceOfRain = Int(currentCondition.chanceOfRain ?? "0") ?? 0
-
-                // Get forecasts
-                var forecasts: [Forecast] = []
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "yyyy-MM-dd"
-                let todayDate = Calendar.current.startOfDay(for: Date())
-
-                for forecastDay in weatherResponse.weather.prefix(3) {
-                    // Parse the forecast date and compare as Date objects instead of strings
-                    guard let forecastDate = dateFormatter.date(from: forecastDay.date),
-                          forecastDate >= todayDate,
-                          let maxTemp = Double(forecastDay.maxtempC),
-                          let minTemp = Double(forecastDay.mintempC) else {
-                        continue
-                    }
-
-                    let desc = forecastDay.hourly.count > self.middayForecastIndex ?
-                        forecastDay.hourly[self.middayForecastIndex].weatherDesc.first?.value ?? "Unknown" : "Unknown"
-
-                    forecasts.append(Forecast(
-                        date: forecastDay.date,
-                        maxTemp: maxTemp,
-                        minTemp: minTemp,
-                        description: desc
-                    ))
-                }
-
-                let weatherData = WeatherData(
-                    temperature: tempC,
-                    feelsLike: feelsLike,
-                    humidity: humidity,
-                    chanceOfRain: chanceOfRain,
-                    weatherDesc: weatherDesc,
-                    areaName: areaName,
-                    windSpeed: currentCondition.windspeedKmph,
-                    windDirection: currentCondition.winddir16Point,
-                    pressure: currentCondition.pressure,
-                    visibility: currentCondition.visibility,
-                    forecasts: forecasts,
-                    cityName: cityName
-                )
-
                 completion(.success(weatherData))
             } catch {
-                print("❌ JSON decoding failed for '\(cityName)': \(error.localizedDescription)")
-                // Log first 500 chars of response to help debug
+                self.logger.error("JSON decoding failed for '\(cityName, privacy: .public)': \(error.localizedDescription, privacy: .public)")
                 if let responseString = String(data: data, encoding: .utf8) {
-                    let preview = responseString.prefix(500)
-                    print("Response preview: \(preview)")
+                    self.logger.debug("Response preview: \(responseString.prefix(500), privacy: .public)")
                 }
                 completion(.failure(NetworkError.decodingError(error)))
             }
         }
 
         task.resume()
+    }
+
+    /// Builds a `WeatherData` value from a decoded wttr.in response.
+    ///
+    /// Returns `nil` when required current-condition fields are missing or unparseable.
+    /// Chance of rain is read from today's midday hourly entry, since wttr.in only
+    /// reports it in the hourly forecast, not in `current_condition`.
+    static func makeWeatherData(
+        from response: WeatherResponse,
+        cityName: String,
+        now: Date = Date()
+    ) -> WeatherData? {
+        guard let currentCondition = response.currentCondition.first,
+              let weatherDesc = currentCondition.weatherDesc.first?.value,
+              let tempC = Double(currentCondition.tempC),
+              let feelsLike = Double(currentCondition.feelsLikeC),
+              let humidity = Int(currentCondition.humidity),
+              let areaName = response.nearestArea.first?.areaName.first?.value else {
+            return nil
+        }
+
+        let todayHourly = response.weather.first?.hourly ?? []
+        let chanceOfRain = todayHourly.count > middayForecastIndex
+            ? Int(todayHourly[middayForecastIndex].chanceOfRain ?? "") ?? 0
+            : 0
+
+        return WeatherData(
+            temperature: tempC,
+            feelsLike: feelsLike,
+            humidity: humidity,
+            chanceOfRain: chanceOfRain,
+            weatherDesc: weatherDesc,
+            areaName: areaName,
+            windSpeed: currentCondition.windspeedKmph,
+            windDirection: currentCondition.winddir16Point,
+            pressure: currentCondition.pressure,
+            visibility: currentCondition.visibility,
+            forecasts: makeForecasts(from: response.weather, now: now),
+            cityName: cityName
+        )
+    }
+
+    /// Builds up to three days of forecasts, skipping any day before `now`.
+    static func makeForecasts(from weather: [Weather], now: Date = Date()) -> [Forecast] {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let todayDate = Calendar.current.startOfDay(for: now)
+
+        var forecasts: [Forecast] = []
+        for forecastDay in weather.prefix(3) {
+            guard let forecastDate = dateFormatter.date(from: forecastDay.date),
+                  forecastDate >= todayDate,
+                  let maxTemp = Double(forecastDay.maxtempC),
+                  let minTemp = Double(forecastDay.mintempC) else {
+                continue
+            }
+
+            let desc = forecastDay.hourly.count > middayForecastIndex
+                ? forecastDay.hourly[middayForecastIndex].weatherDesc.first?.value ?? "Unknown"
+                : "Unknown"
+
+            forecasts.append(Forecast(
+                date: forecastDay.date,
+                maxTemp: maxTemp,
+                minTemp: minTemp,
+                description: desc
+            ))
+        }
+        return forecasts
     }
 }
