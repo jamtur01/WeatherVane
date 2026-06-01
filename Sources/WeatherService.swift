@@ -7,6 +7,8 @@ class WeatherService {
     private let urlSession: URLSession
     private let baseURL = "https://wttr.in"
     private let logger = Logger(subsystem: "net.lovedthanlost.weathervane", category: "weather")
+    private let maxRetries: Int
+    private let retryBaseDelay: TimeInterval
 
     // Hourly forecast index representing midday (around noon)
     // wttr.in provides hourly data in 3-hour intervals starting at midnight
@@ -22,10 +24,20 @@ class WeatherService {
         "Moderate snow": "❄️🌨", "Heavy snow": "❄️❄️", "Blizzard": "❄️🌪", "Thunderstorm": "⛈️"
     ]
 
-    init() {
+    init(
+        urlSession: URLSession = WeatherService.makeDefaultSession(),
+        maxRetries: Int = 3,
+        retryBaseDelay: TimeInterval = 1.0
+    ) {
+        self.urlSession = urlSession
+        self.maxRetries = maxRetries
+        self.retryBaseDelay = retryBaseDelay
+    }
+
+    private static func makeDefaultSession() -> URLSession {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
-        urlSession = URLSession(configuration: config)
+        return URLSession(configuration: config)
     }
 
     func getTempEmoji(forTemp temp: Double) -> String {
@@ -69,6 +81,28 @@ class WeatherService {
     }
 
     func fetchWeather(cityName: String, completion: @escaping (Result<WeatherData, Error>) -> Void) {
+        performFetch(cityName: cityName, attempt: 0, completion: completion)
+    }
+
+    /// wttr.in intermittently returns transient 5xx/429 errors for a given location.
+    /// Returns `true` for errors worth retrying and `false` for deterministic ones
+    /// (bad query, unknown location, malformed JSON) that will fail again identically.
+    static func isRetryable(_ error: NetworkError) -> Bool {
+        switch error {
+        case .networkError:
+            return true
+        case .invalidResponse(let statusCode):
+            return statusCode >= 500 || statusCode == 429
+        case .invalidCityName, .invalidWeatherData, .decodingError:
+            return false
+        }
+    }
+
+    private func performFetch(
+        cityName: String,
+        attempt: Int,
+        completion: @escaping (Result<WeatherData, Error>) -> Void
+    ) {
         guard !cityName.isEmpty,
               let encodedCity = cityName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "\(baseURL)/\(encodedCity)?format=j1") else {
@@ -80,46 +114,66 @@ class WeatherService {
         request.addValue("curl/7.64.1", forHTTPHeaderField: "User-Agent")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
-        let task = urlSession.dataTask(with: request) { (data, response, error) in
-            if let error = error {
-                completion(.failure(NetworkError.networkError(error)))
-                return
-            }
+        let task = urlSession.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
 
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200,
-                  let data = data else {
-                completion(.failure(NetworkError.invalidResponse(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)))
-                return
-            }
-
-            // Check if response is an error message
-            if let responseString = String(data: data, encoding: .utf8),
-               responseString.lowercased().contains("unknown location") {
-                self.logger.warning("wttr.in returned 'unknown location' for query: \(cityName, privacy: .public)")
-                completion(.failure(NetworkError.invalidWeatherData))
-                return
-            }
-
-            do {
-                let weatherResponse = try JSONDecoder().decode(WeatherResponse.self, from: data)
-
-                guard let weatherData = Self.makeWeatherData(from: weatherResponse, cityName: cityName) else {
-                    completion(.failure(NetworkError.invalidWeatherData))
+            switch self.parse(data: data, response: response, error: error, cityName: cityName) {
+            case .success(let weatherData):
+                completion(.success(weatherData))
+            case .failure(let networkError):
+                guard attempt < self.maxRetries, Self.isRetryable(networkError) else {
+                    completion(.failure(networkError))
                     return
                 }
-
-                completion(.success(weatherData))
-            } catch {
-                self.logger.error("JSON decoding failed for '\(cityName, privacy: .public)': \(error.localizedDescription, privacy: .public)")
-                if let responseString = String(data: data, encoding: .utf8) {
-                    self.logger.debug("Response preview: \(responseString.prefix(500), privacy: .public)")
+                let delay = self.retryBaseDelay * pow(2.0, Double(attempt))
+                self.logger.warning("Retrying '\(cityName, privacy: .public)' after \(networkError.localizedDescription, privacy: .public) (attempt \(attempt + 2)/\(self.maxRetries + 1)) in \(delay, privacy: .public)s")
+                DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.performFetch(cityName: cityName, attempt: attempt + 1, completion: completion)
                 }
-                completion(.failure(NetworkError.decodingError(error)))
             }
         }
 
         task.resume()
+    }
+
+    private func parse(
+        data: Data?,
+        response: URLResponse?,
+        error: Error?,
+        cityName: String
+    ) -> Result<WeatherData, NetworkError> {
+        if let error = error {
+            return .failure(.networkError(error))
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200,
+              let data = data else {
+            return .failure(.invalidResponse(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0))
+        }
+
+        // Check if response is an error message
+        if let responseString = String(data: data, encoding: .utf8),
+           responseString.lowercased().contains("unknown location") {
+            logger.warning("wttr.in returned 'unknown location' for query: \(cityName, privacy: .public)")
+            return .failure(.invalidWeatherData)
+        }
+
+        do {
+            let weatherResponse = try JSONDecoder().decode(WeatherResponse.self, from: data)
+
+            guard let weatherData = Self.makeWeatherData(from: weatherResponse, cityName: cityName) else {
+                return .failure(.invalidWeatherData)
+            }
+
+            return .success(weatherData)
+        } catch {
+            logger.error("JSON decoding failed for '\(cityName, privacy: .public)': \(error.localizedDescription, privacy: .public)")
+            if let responseString = String(data: data, encoding: .utf8) {
+                logger.debug("Response preview: \(responseString.prefix(500), privacy: .public)")
+            }
+            return .failure(.decodingError(error))
+        }
     }
 
     /// Builds a `WeatherData` value from a decoded wttr.in response.
