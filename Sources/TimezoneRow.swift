@@ -12,7 +12,6 @@ struct TimezoneRow: View {
     let onDrag: (Date) -> Void
     let onReset: () -> Void
 
-    @State private var colonVisible = true
     @State private var weatherExpanded = false
     @State private var datePickerOpen = false
     @State private var pendingDate = Date()
@@ -35,7 +34,6 @@ struct TimezoneRow: View {
         .padding(.vertical, Constants.rowVerticalPadding)
         .background(Color.primary.opacity(0.04))
         .cornerRadius(Constants.rowCornerRadius)
-        .onAppear { colonVisible = false }
     }
 
     private func headerRow(dateColor: Color, timeColor: Color) -> some View {
@@ -80,14 +78,21 @@ struct TimezoneRow: View {
             Text(":")
                 .font(.system(size: 30, weight: .medium, design: .rounded))
                 .monospacedDigit()
-                .opacity(isFrozen ? 1 : (colonVisible ? 1 : 0.15))
-                .animation(isFrozen ? nil : .easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: colonVisible)
+                .opacity(colonOpacity)
                 .offset(y: -1.5)
             Text(minute)
                 .font(.system(size: 30, weight: .medium, design: .rounded))
                 .monospacedDigit()
         }
         .foregroundColor(timeColor)
+    }
+
+    /// Discrete colon blink driven by the live clock — no continuous animation, so it
+    /// costs nothing while the popover is closed. Solid when time is frozen by the slider.
+    private var colonOpacity: Double {
+        guard !isFrozen else { return 1 }
+        let second = Calendar.current.component(.second, from: effectiveNow)
+        return second.isMultiple(of: 2) ? 1 : 0.3
     }
 
     private static func shiftColor(for offset: Int) -> Color? {
