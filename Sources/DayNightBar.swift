@@ -14,6 +14,14 @@ struct DayNightBar: View {
     private let markerSize: CGFloat = Constants.dayNightBarMarkerSize
     private let tickCount: Int = Constants.dayNightBarTickCount
 
+    // Cached once rather than allocated per tick on every re-render. The nighttime
+    // color stays appearance-adaptive — the provider is evaluated by the system.
+    private static let daytimeTickColor = Color.orange.opacity(0.85)
+    private static let nighttimeTickColor = Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua]) == .darkAqua
+        return isDark ? NSColor(white: 0.5, alpha: 1) : NSColor(white: 0.3, alpha: 1)
+    }))
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -35,12 +43,7 @@ struct DayNightBar: View {
             let isHour = tick % 4 == 0
             let height: CGFloat = isMajor ? 14 : (isHour ? 9 : 5)
             let isDaytime = hour >= 6 && hour <= 18
-            let color: Color = isDaytime
-                ? Color.orange.opacity(0.85)
-                : Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-                    let isDark = appearance.bestMatch(from: [.darkAqua]) == .darkAqua
-                    return isDark ? NSColor(white: 0.5, alpha: 1) : NSColor(white: 0.3, alpha: 1)
-                }))
+            let color = isDaytime ? Self.daytimeTickColor : Self.nighttimeTickColor
 
             Rectangle()
                 .fill(color)

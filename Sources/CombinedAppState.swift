@@ -141,8 +141,16 @@ final class WeathervaneState: ObservableObject {
         cancelAllRecovery()
         selectedCities = TimeZoneManager.sortCitiesByTimezone(cities)
         currentCityIndex = 0
+        pruneWeatherState(toKeep: Set(selectedCities.map { $0.displayName }))
         saveCities()
         fetchAllWeather()
+    }
+
+    /// Drop cached weather/error/loading entries for cities no longer selected.
+    private func pruneWeatherState(toKeep keys: Set<String>) {
+        weatherDataByCity = weatherDataByCity.filter { keys.contains($0.key) }
+        errorsByCity = errorsByCity.filter { keys.contains($0.key) }
+        loadingCities = loadingCities.filter { keys.contains($0) }
     }
 
     private func cancelAllRecovery() {

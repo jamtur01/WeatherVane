@@ -68,9 +68,18 @@ final class CombinedStatusBarController {
 
     @MainActor
     private func updateStatusItemTitle() {
+        // The title is minute-granularity, so most 1s ticks produce the same string.
+        // Only assign when it changed to avoid needless status-bar relayout.
+        let newTitle = makeStatusTitle()
+        if statusItem.button?.title != newTitle {
+            statusItem.button?.title = newTitle
+        }
+    }
+
+    @MainActor
+    private func makeStatusTitle() -> String {
         guard let currentCity = appState.currentDisplayCity else {
-            statusItem.button?.title = Constants.defaultMenuBarTitle
-            return
+            return Constants.defaultMenuBarTitle
         }
 
         var titleComponents: [String] = []
@@ -86,7 +95,7 @@ final class CombinedStatusBarController {
         let timeString = appState.getTimeString(for: currentCity, shortFormat: true)
         titleComponents.append("\(currentCity.emoji) \(currentCity.code) \(timeString)")
 
-        statusItem.button?.title = titleComponents.joined(separator: " | ")
+        return titleComponents.joined(separator: " | ")
     }
 
     @objc private func togglePopover(_ sender: AnyObject?) {
