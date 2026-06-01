@@ -52,6 +52,24 @@ chmod +x "$MACOS_DIR/Weathervane"
 # Copy Info.plist
 cp Info/Info.plist "$CONTENTS_DIR/"
 
+# Generate the app icon (.icns) from the 1024px source PNG and bundle it.
+# sips and iconutil ship with macOS, so this works locally and in CI.
+ICON_SOURCE="Icon/icon.png"
+if [ -r "$ICON_SOURCE" ]; then
+  echo "Generating app icon from $ICON_SOURCE..."
+  ICONSET_DIR="$BUILD_DIR/AppIcon.iconset"
+  rm -rf "$ICONSET_DIR"
+  mkdir -p "$ICONSET_DIR"
+  for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
+    sips -z "$((size * 2))" "$((size * 2))" "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AppIcon.icns"
+  rm -rf "$ICONSET_DIR"
+else
+  echo "Warning: $ICON_SOURCE not found; bundling without an app icon."
+fi
+
 # Sign the application
 if [ -z "${CI:-}" ]; then
   if [ -n "${APPLE_DEVELOPER_CERTIFICATE_P12_BASE64:-}" ] && [ -n "${APPLE_DEVELOPER_CERTIFICATE_PASSWORD:-}" ]; then
