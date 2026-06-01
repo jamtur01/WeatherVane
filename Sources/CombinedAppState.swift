@@ -46,6 +46,10 @@ final class WeathervaneState: ObservableObject {
     private var liveTickTimer: Timer?
     private var isPopoverOpen = false
 
+    // Per-city quick recovery after a transient failure (keyed by displayName).
+    private var recoveryAttempts: [String: Int] = [:]
+    private var recoveryWorkItems: [String: DispatchWorkItem] = [:]
+
     let allAvailableTimezones = TimeZoneManager.getAllAvailableCities()
 
     var currentDisplayCity: City? {
@@ -64,6 +68,7 @@ final class WeathervaneState: ObservableObject {
         weatherTimer?.invalidate()
         cityRotationTimer?.invalidate()
         liveTickTimer?.invalidate()
+        recoveryWorkItems.values.forEach { $0.cancel() }
     }
 
     // MARK: - Time Zone Methods
@@ -133,10 +138,17 @@ final class WeathervaneState: ObservableObject {
     }
 
     func updateSelectedCities(_ cities: [City]) {
+        cancelAllRecovery()
         selectedCities = TimeZoneManager.sortCitiesByTimezone(cities)
         currentCityIndex = 0
         saveCities()
         fetchAllWeather()
+    }
+
+    private func cancelAllRecovery() {
+        recoveryWorkItems.values.forEach { $0.cancel() }
+        recoveryWorkItems.removeAll()
+        recoveryAttempts.removeAll()
     }
 
     // MARK: - Persistence
@@ -195,66 +207,82 @@ final class WeathervaneState: ObservableObject {
         }
     }
 
-    /// Get the best query string for a city's weather
-    /// Some airport codes don't work well with wttr.in, so we use special mappings
-    private func getWeatherQuery(for city: City, useCode: Bool) -> String {
-        if useCode {
-            // Special mappings for codes that don't work
-            // Using simple city names that wttr.in can reliably parse
-            switch city.code {
-            case "NYC": return "NewYork"
-            case "LAX": return "LosAngeles"
-            case "CHI": return "Chicago"
-            case "LHR": return "London"
-            case "MEL": return "Melbourne"
-            default: return city.code
-            }
-        }
-        return city.displayName
+    /// Primary query: the city's full name, which wttr.in resolves reliably.
+    private func primaryQuery(for city: City) -> String {
+        city.displayName
+    }
+
+    /// Fallback query: the name with spaces removed (e.g. "New York" -> "NewYork").
+    /// Gives a distinct second query for multi-word names; equals the primary for
+    /// single-word names, in which case the fallback request is skipped.
+    private func fallbackQuery(for city: City) -> String {
+        city.displayName.replacingOccurrences(of: " ", with: "")
     }
 
     func fetchWeather(for city: City) {
         let cityKey = city.displayName
+        recoveryWorkItems[cityKey]?.cancel()
+        recoveryWorkItems[cityKey] = nil
 
         loadingCities.insert(cityKey)
         errorsByCity.removeValue(forKey: cityKey)
 
-        // Try display name first
-        let query = getWeatherQuery(for: city, useCode: false)
+        attemptFetch(for: city, query: primaryQuery(for: city), isFallback: false)
+    }
+
+    private func attemptFetch(for city: City, query: String, isFallback: Bool) {
+        let cityKey = city.displayName
         weatherService.fetchWeather(cityName: query) { [weak self] result in
             guard let self = self else { return }
-
             DispatchQueue.main.async {
                 switch result {
                 case .success(let data):
                     self.loadingCities.remove(cityKey)
                     self.weatherDataByCity[cityKey] = data
                     self.errorsByCity.removeValue(forKey: cityKey)
-                case .failure(let initialError):
-                    // Try fallback query
-                    let fallbackQuery = self.getWeatherQuery(for: city, useCode: true)
-                    self.logger.warning("Weather fetch failed for '\(city.displayName, privacy: .public)' using query '\(query, privacy: .public)' (\(initialError.localizedDescription, privacy: .public)); trying fallback '\(fallbackQuery, privacy: .public)'")
-
-                    self.weatherService.fetchWeather(cityName: fallbackQuery) { [weak self] fallbackResult in
-                        guard let self = self else { return }
-
-                        DispatchQueue.main.async {
-                            self.loadingCities.remove(cityKey)
-
-                            switch fallbackResult {
-                            case .success(let data):
-                                self.weatherDataByCity[cityKey] = data
-                                self.errorsByCity.removeValue(forKey: cityKey)
-                                self.logger.info("Fallback succeeded for '\(city.displayName, privacy: .public)' using query '\(fallbackQuery, privacy: .public)'")
-                            case .failure(let error):
-                                self.errorsByCity[cityKey] = error.localizedDescription
-                                self.logger.error("Both fetch attempts failed for '\(city.displayName, privacy: .public)': '\(query, privacy: .public)' (\(initialError.localizedDescription, privacy: .public)), '\(fallbackQuery, privacy: .public)' (\(error.localizedDescription, privacy: .public))")
-                            }
-                        }
+                    self.recoveryAttempts[cityKey] = nil
+                case .failure(let error):
+                    let fallback = self.fallbackQuery(for: city)
+                    if !isFallback, fallback != query {
+                        self.logger.warning("Weather fetch failed for '\(cityKey, privacy: .public)' using '\(query, privacy: .public)' (\(error.localizedDescription, privacy: .public)); trying fallback '\(fallback, privacy: .public)'")
+                        self.attemptFetch(for: city, query: fallback, isFallback: true)
+                    } else {
+                        self.loadingCities.remove(cityKey)
+                        self.errorsByCity[cityKey] = error.localizedDescription
+                        self.logger.error("Weather fetch failed for '\(cityKey, privacy: .public)': \(error.localizedDescription, privacy: .public)")
+                        self.scheduleRecovery(for: city, error: error)
                     }
                 }
             }
         }
+    }
+
+    /// After a transient failure, re-poll just this city sooner than the next full
+    /// poll, backing off and capping attempts before deferring to the normal cycle.
+    private func scheduleRecovery(for city: City, error: Error) {
+        let cityKey = city.displayName
+        guard let networkError = error as? NetworkError,
+              WeatherService.isRetryable(networkError) else {
+            recoveryAttempts[cityKey] = nil
+            return
+        }
+
+        let attempt = recoveryAttempts[cityKey] ?? 0
+        guard attempt < Constants.maxWeatherRecoveryAttempts else { return }
+        recoveryAttempts[cityKey] = attempt + 1
+
+        let delay = Self.recoveryDelay(forAttempt: attempt)
+        let work = DispatchWorkItem { [weak self] in
+            self?.recoveryWorkItems[cityKey] = nil
+            self?.fetchWeather(for: city)
+        }
+        recoveryWorkItems[cityKey] = work
+        logger.info("Scheduling weather recovery for '\(cityKey, privacy: .public)' in \(delay, privacy: .public)s (attempt \(attempt + 1)/\(Constants.maxWeatherRecoveryAttempts))")
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    static func recoveryDelay(forAttempt attempt: Int) -> TimeInterval {
+        Constants.weatherRecoveryBaseDelay * pow(2.0, Double(attempt))
     }
 
     func getWeather(for city: City) -> WeatherData? {

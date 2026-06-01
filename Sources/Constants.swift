@@ -7,6 +7,10 @@ enum Constants {
     static let weatherUpdateInterval: TimeInterval = 300.0 // 5 minutes
     static let weatherRequestDelay: TimeInterval = 1.0 // Delay between API requests to avoid rate limiting
 
+    // Per-city recovery re-poll after a transient failure, before the next full poll.
+    static let weatherRecoveryBaseDelay: TimeInterval = 30.0 // 30s, 60s, 120s
+    static let maxWeatherRecoveryAttempts = 3
+
     // Time calculations
     static let secondsPerHour: TimeInterval = 3600
 
