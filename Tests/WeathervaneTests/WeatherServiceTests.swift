@@ -1,5 +1,5 @@
-import XCTest
 @testable import Weathervane
+import XCTest
 
 final class WeatherServiceTests: XCTestCase {
     private let service = WeatherService.shared
@@ -77,6 +77,25 @@ final class WeatherServiceTests: XCTestCase {
         // Fixture has 2026-05-30 (past), 2026-05-31 (today), 2026-06-01 (future).
         XCTAssertEqual(data.forecasts.map(\.date), ["2026-05-31", "2026-06-01"])
         XCTAssertEqual(data.forecasts.first?.description, "Partly cloudy")
+    }
+
+    func testMakeForecastsUsesTrackedCityDate() throws {
+        let response = try decode(WeatherFixture.json)
+        let now = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-05-31T00:30:00Z")
+        )
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+
+        let forecasts = WeatherService.makeForecasts(
+            from: response.weather,
+            timeZone: timeZone,
+            now: now
+        )
+
+        XCTAssertEqual(
+            forecasts.map(\.date),
+            ["2026-05-30", "2026-05-31", "2026-06-01"]
+        )
     }
 
     func testMakeWeatherDataReturnsNilWhenCurrentConditionMissing() throws {

@@ -1,12 +1,12 @@
-import SwiftUI
 import Foundation
 import os
+import SwiftUI
 
 final class WeathervaneState: ObservableObject {
     private static let selectedCityCodesKey = "selectedCityCodes"
     private let logger = Logger(subsystem: "net.lovedthanlost.weathervane", category: "state")
 
-    // Time zone state
+    /// Time zone state
     @Published var selectedCities: [City] = []
     // Drives the rotating menu-bar title only; read directly (not via Combine),
     // so it is intentionally not @Published to avoid re-rendering the popover.
@@ -21,8 +21,13 @@ final class WeathervaneState: ObservableObject {
         }
     }
 
-    var effectiveNow: Date { virtualNow ?? Date() }
-    var isVirtualTime: Bool { virtualNow != nil }
+    var effectiveNow: Date {
+        virtualNow ?? Date()
+    }
+
+    var isVirtualTime: Bool {
+        virtualNow != nil
+    }
 
     // Weather state - per city
     @Published var weatherDataByCity: [String: WeatherData] = [:]
@@ -79,8 +84,8 @@ final class WeathervaneState: ObservableObject {
             withTimeInterval: Constants.cityRotationInterval,
             repeats: true
         ) { [weak self] _ in
-            guard let self = self, !self.selectedCities.isEmpty else { return }
-            self.currentCityIndex = (self.currentCityIndex + 1) % self.selectedCities.count
+            guard let self, !self.selectedCities.isEmpty else { return }
+            currentCityIndex = (currentCityIndex + 1) % selectedCities.count
         }
     }
 
@@ -141,7 +146,7 @@ final class WeathervaneState: ObservableObject {
         cancelAllRecovery()
         selectedCities = TimeZoneManager.sortCitiesByTimezone(cities)
         currentCityIndex = 0
-        pruneWeatherState(toKeep: Set(selectedCities.map { $0.displayName }))
+        pruneWeatherState(toKeep: Set(selectedCities.map(\.displayName)))
         saveCities()
         fetchAllWeather()
     }
@@ -162,7 +167,7 @@ final class WeathervaneState: ObservableObject {
     // MARK: - Persistence
 
     private func saveCities() {
-        let codes = selectedCities.map { $0.code }
+        let codes = selectedCities.map(\.code)
         UserDefaults.standard.set(codes, forKey: Self.selectedCityCodesKey)
     }
 
@@ -240,16 +245,16 @@ final class WeathervaneState: ObservableObject {
 
     private func attemptFetch(for city: City, query: String, isFallback: Bool) {
         let cityKey = city.displayName
-        weatherService.fetchWeather(cityName: query) { [weak self] result in
-            guard let self = self else { return }
+        weatherService.fetchWeather(cityName: query, timeZone: city.timeZone) { [weak self] result in
+            guard let self else { return }
             DispatchQueue.main.async {
                 switch result {
-                case .success(let data):
+                case let .success(data):
                     self.loadingCities.remove(cityKey)
                     self.weatherDataByCity[cityKey] = data
                     self.errorsByCity.removeValue(forKey: cityKey)
                     self.recoveryAttempts[cityKey] = nil
-                case .failure(let error):
+                case let .failure(error):
                     let fallback = self.fallbackQuery(for: city)
                     if !isFallback, fallback != query {
                         self.logger.warning("Weather fetch failed for '\(cityKey, privacy: .public)' using '\(query, privacy: .public)' (\(error.localizedDescription, privacy: .public)); trying fallback '\(fallback, privacy: .public)'")
@@ -294,14 +299,14 @@ final class WeathervaneState: ObservableObject {
     }
 
     func getWeather(for city: City) -> WeatherData? {
-        return weatherDataByCity[city.displayName]
+        weatherDataByCity[city.displayName]
     }
 
     func isLoading(for city: City) -> Bool {
-        return loadingCities.contains(city.displayName)
+        loadingCities.contains(city.displayName)
     }
 
     func getError(for city: City) -> String? {
-        return errorsByCity[city.displayName]
+        errorsByCity[city.displayName]
     }
 }

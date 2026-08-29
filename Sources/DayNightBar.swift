@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct DayNightBar: View {
     let timeZone: TimeZone
@@ -36,7 +36,7 @@ struct DayNightBar: View {
     }
 
     private func tickMarks(width: CGFloat) -> some View {
-        ForEach(0..<tickCount, id: \.self) { tick in
+        ForEach(0 ..< tickCount, id: \.self) { tick in
             let hour = Double(tick) / 4.0
             let x = CGFloat(tick) / CGFloat(tickCount - 1) * width
             let isMajor = tick % 24 == 0
@@ -88,15 +88,11 @@ struct DayNightBar: View {
                 isDragging = true
 
                 let fraction = max(0, min(value.location.x / width, 1.0))
-                let targetHour = fraction * 24.0
-
-                var cal = Calendar.current
-                cal.timeZone = timeZone
-                let dayStart = cal.startOfDay(for: effectiveNow)
-                let raw = dayStart.addingTimeInterval(targetHour * 3600)
-                // Snap to 1 minute
-                let snapped = Date(timeIntervalSince1970: (raw.timeIntervalSince1970 / 60).rounded() * 60)
-                onDrag(snapped)
+                onDrag(Self.targetDate(
+                    forFraction: fraction,
+                    on: effectiveNow,
+                    in: timeZone
+                ))
             }
             .onEnded { value in
                 isDragging = false
@@ -111,5 +107,31 @@ struct DayNightBar: View {
                     }
                 }
             }
+    }
+
+    static func targetDate(
+        forFraction fraction: Double,
+        on day: Date,
+        in timeZone: TimeZone
+    ) -> Date {
+        let clampedFraction = max(0, min(fraction, 1))
+        let totalMinutes = min(Int((clampedFraction * 1440).rounded()), 1439)
+        let hour = totalMinutes / 60
+        let minute = totalMinutes % 60
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        guard let target = calendar.date(
+            bySettingHour: hour,
+            minute: minute,
+            second: 0,
+            of: day,
+            matchingPolicy: .nextTime,
+            repeatedTimePolicy: .first,
+            direction: .forward
+        ) else {
+            return day
+        }
+        return target
     }
 }

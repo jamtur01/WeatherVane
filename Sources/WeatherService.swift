@@ -10,13 +10,13 @@ class WeatherService {
     private let maxRetries: Int
     private let retryBaseDelay: TimeInterval
 
-    // Hourly forecast index representing midday (around noon)
-    // wttr.in provides hourly data in 3-hour intervals starting at midnight
-    // Index 4 represents approximately 12:00 PM, providing a representative
-    // forecast for the overall day's conditions
+    /// Hourly forecast index representing midday (around noon)
+    /// wttr.in provides hourly data in 3-hour intervals starting at midnight
+    /// Index 4 represents approximately 12:00 PM, providing a representative
+    /// forecast for the overall day's conditions
     private static let middayForecastIndex = 4
 
-    // Simple weather emoji mappings
+    /// Simple weather emoji mappings
     private let weatherEmojis: [String: String] = [
         "Clear": "☀️", "Sunny": "🌞", "Partly cloudy": "⛅", "Cloudy": "☁️",
         "Overcast": "🌥️", "Mist": "🌫", "Fog": "🌁", "Light rain": "🌧",
@@ -42,12 +42,12 @@ class WeatherService {
 
     func getTempEmoji(forTemp temp: Double) -> String {
         switch temp {
-        case 35...: return "🔥"
-        case 25..<35: return "🌞"
-        case 15..<25: return "🌤️"
-        case 5..<15: return "☁️"
-        case 0..<5: return "❄️"
-        default: return "⛄"
+        case 35...: "🔥"
+        case 25 ..< 35: "🌞"
+        case 15 ..< 25: "🌤️"
+        case 5 ..< 15: "☁️"
+        case 0 ..< 5: "❄️"
+        default: "⛄"
         }
     }
 
@@ -80,8 +80,17 @@ class WeatherService {
         return "🌡️"
     }
 
-    func fetchWeather(cityName: String, completion: @escaping (Result<WeatherData, Error>) -> Void) {
-        performFetch(cityName: cityName, attempt: 0, completion: completion)
+    func fetchWeather(
+        cityName: String,
+        timeZone: TimeZone,
+        completion: @escaping (Result<WeatherData, Error>) -> Void
+    ) {
+        performFetch(
+            cityName: cityName,
+            timeZone: timeZone,
+            attempt: 0,
+            completion: completion
+        )
     }
 
     /// wttr.in intermittently returns transient 5xx/429 errors for a given location.
@@ -90,16 +99,17 @@ class WeatherService {
     static func isRetryable(_ error: NetworkError) -> Bool {
         switch error {
         case .networkError:
-            return true
-        case .invalidResponse(let statusCode):
-            return statusCode >= 500 || statusCode == 429
+            true
+        case let .invalidResponse(statusCode):
+            statusCode >= 500 || statusCode == 429
         case .invalidCityName, .invalidWeatherData, .decodingError:
-            return false
+            false
         }
     }
 
     private func performFetch(
         cityName: String,
+        timeZone: TimeZone,
         attempt: Int,
         completion: @escaping (Result<WeatherData, Error>) -> Void
     ) {
@@ -115,20 +125,31 @@ class WeatherService {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
 
         let task = urlSession.dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else { return }
+            guard let self else { return }
 
-            switch self.parse(data: data, response: response, error: error, cityName: cityName) {
-            case .success(let weatherData):
+            switch parse(
+                data: data,
+                response: response,
+                error: error,
+                cityName: cityName,
+                timeZone: timeZone
+            ) {
+            case let .success(weatherData):
                 completion(.success(weatherData))
-            case .failure(let networkError):
-                guard attempt < self.maxRetries, Self.isRetryable(networkError) else {
+            case let .failure(networkError):
+                guard attempt < maxRetries, Self.isRetryable(networkError) else {
                     completion(.failure(networkError))
                     return
                 }
-                let delay = self.retryBaseDelay * pow(2.0, Double(attempt))
-                self.logger.warning("Retrying '\(cityName, privacy: .public)' after \(networkError.localizedDescription, privacy: .public) (attempt \(attempt + 2)/\(self.maxRetries + 1)) in \(delay, privacy: .public)s")
+                let delay = retryBaseDelay * pow(2.0, Double(attempt))
+                logger.warning("Retrying '\(cityName, privacy: .public)' after \(networkError.localizedDescription, privacy: .public) (attempt \(attempt + 2)/\(maxRetries + 1)) in \(delay, privacy: .public)s")
                 DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
-                    self?.performFetch(cityName: cityName, attempt: attempt + 1, completion: completion)
+                    self?.performFetch(
+                        cityName: cityName,
+                        timeZone: timeZone,
+                        attempt: attempt + 1,
+                        completion: completion
+                    )
                 }
             }
         }
@@ -140,15 +161,16 @@ class WeatherService {
         data: Data?,
         response: URLResponse?,
         error: Error?,
-        cityName: String
+        cityName: String,
+        timeZone: TimeZone
     ) -> Result<WeatherData, NetworkError> {
-        if let error = error {
+        if let error {
             return .failure(.networkError(error))
         }
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200,
-              let data = data else {
+              let data else {
             return .failure(.invalidResponse(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0))
         }
 
@@ -162,7 +184,11 @@ class WeatherService {
         do {
             let weatherResponse = try JSONDecoder().decode(WeatherResponse.self, from: data)
 
-            guard let weatherData = Self.makeWeatherData(from: weatherResponse, cityName: cityName) else {
+            guard let weatherData = Self.makeWeatherData(
+                from: weatherResponse,
+                cityName: cityName,
+                timeZone: timeZone
+            ) else {
                 return .failure(.invalidWeatherData)
             }
 
@@ -184,6 +210,7 @@ class WeatherService {
     static func makeWeatherData(
         from response: WeatherResponse,
         cityName: String,
+        timeZone: TimeZone = .current,
         now: Date = Date()
     ) -> WeatherData? {
         guard let currentCondition = response.currentCondition.first,
@@ -211,19 +238,29 @@ class WeatherService {
             windDirection: currentCondition.winddir16Point,
             pressure: currentCondition.pressure,
             visibility: currentCondition.visibility,
-            forecasts: makeForecasts(from: response.weather, now: now),
+            forecasts: makeForecasts(from: response.weather, timeZone: timeZone, now: now),
             cityName: cityName
         )
     }
 
     /// Builds up to three days of forecasts, skipping any day before `now`.
-    static func makeForecasts(from weather: [Weather], now: Date = Date()) -> [Forecast] {
+    static func makeForecasts(
+        from weather: [Weather],
+        timeZone: TimeZone,
+        now: Date = Date()
+    ) -> [Forecast] {
         let dateFormatter = DateFormatter()
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateFormatter.timeZone = timeZone
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        let todayDate = Calendar.current.startOfDay(for: now)
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let todayDate = calendar.startOfDay(for: now)
 
         var forecasts: [Forecast] = []
-        for forecastDay in weather.prefix(3) {
+        for forecastDay in weather {
             guard let forecastDate = dateFormatter.date(from: forecastDay.date),
                   forecastDate >= todayDate,
                   let maxTemp = Double(forecastDay.maxtempC),
@@ -241,6 +278,9 @@ class WeatherService {
                 minTemp: minTemp,
                 description: desc
             ))
+            if forecasts.count == 3 {
+                break
+            }
         }
         return forecasts
     }

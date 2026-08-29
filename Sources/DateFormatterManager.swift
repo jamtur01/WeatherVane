@@ -2,7 +2,6 @@ import Foundation
 
 /// Centralized date formatter management.
 final class DateFormatterManager {
-
     private static let lock = NSLock()
 
     private static let shortFormatter12: DateFormatter = makeFormatter(Constants.shortTimeFormat12)
@@ -15,12 +14,15 @@ final class DateFormatterManager {
 
     static let forecastDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
 
     static let dayOfWeekFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "EEE"
         return formatter
     }()
@@ -35,19 +37,19 @@ final class DateFormatterManager {
     }
 
     static func formatShortTime(for city: City, date: Date = Date(), use24Hour: Bool = true) -> String {
-        return format(date: date, timeZone: city.timeZone, using: use24Hour ? shortFormatter24 : shortFormatter12)
+        format(date: date, timeZone: city.timeZone, using: use24Hour ? shortFormatter24 : shortFormatter12)
     }
 
     static func formatLongTime(for city: City, date: Date = Date(), use24Hour: Bool = true) -> String {
-        return format(date: date, timeZone: city.timeZone, using: use24Hour ? longFormatter24 : longFormatter12)
+        format(date: date, timeZone: city.timeZone, using: use24Hour ? longFormatter24 : longFormatter12)
     }
 
     static func formatBigTime(for city: City, date: Date = Date(), use24Hour: Bool = true) -> String {
-        return format(date: date, timeZone: city.timeZone, using: use24Hour ? bigTimeFormatter24 : bigTimeFormatter12)
+        format(date: date, timeZone: city.timeZone, using: use24Hour ? bigTimeFormatter24 : bigTimeFormatter12)
     }
 
     static func formatRowDate(for city: City, date: Date = Date()) -> String {
-        return format(date: date, timeZone: city.timeZone, using: rowDateFormatter)
+        format(date: date, timeZone: city.timeZone, using: rowDateFormatter)
     }
 
     static func formatGMTOffset(for city: City, date: Date = Date()) -> String {
@@ -63,16 +65,24 @@ final class DateFormatterManager {
         return "GMT\(sign)\(hours):\(String(format: "%02d", minutes))"
     }
 
-    static func formatForecastDate(_ dateString: String) -> String {
+    static func formatForecastDate(
+        _ dateString: String,
+        timeZone: TimeZone = .current,
+        now: Date = Date()
+    ) -> String {
         lock.lock()
+        forecastDateFormatter.timeZone = timeZone
         let date = forecastDateFormatter.date(from: dateString)
         lock.unlock()
 
-        guard let date = date else { return dateString }
+        guard let date else { return dateString }
 
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let today = calendar.startOfDay(for: now)
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) else {
+            return dateString
+        }
 
         if calendar.isDate(date, inSameDayAs: today) {
             return "Today"
@@ -81,6 +91,7 @@ final class DateFormatterManager {
         }
         lock.lock()
         defer { lock.unlock() }
+        dayOfWeekFormatter.timeZone = timeZone
         return dayOfWeekFormatter.string(from: date)
     }
 

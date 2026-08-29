@@ -1,8 +1,10 @@
-import XCTest
 @testable import Weathervane
+import XCTest
 
 final class WeatherServiceRetryTests: XCTestCase {
-    private var validBody: Data { Data(WeatherFixture.json.utf8) }
+    private var validBody: Data {
+        Data(WeatherFixture.json.utf8)
+    }
 
     private func makeService(maxRetries: Int = 3) -> WeatherService {
         let config = URLSessionConfiguration.ephemeral
@@ -15,7 +17,7 @@ final class WeatherServiceRetryTests: XCTestCase {
     private func fetch(_ service: WeatherService) -> Result<WeatherData, Error> {
         let expectation = expectation(description: "fetch")
         var captured: Result<WeatherData, Error>!
-        service.fetchWeather(cityName: "Chicago") { result in
+        service.fetchWeather(cityName: "Chicago", timeZone: .current) { result in
             captured = result
             expectation.fulfill()
         }
@@ -45,7 +47,7 @@ final class WeatherServiceRetryTests: XCTestCase {
     func testRecoversAfterTransient500() {
         MockURLProtocol.reset(with: [
             .response(status: 500, body: Data()),
-            .response(status: 200, body: validBody),
+            .response(status: 200, body: validBody)
         ])
         let result = fetch(makeService())
         XCTAssertNoThrow(try result.get())
@@ -55,7 +57,7 @@ final class WeatherServiceRetryTests: XCTestCase {
     func testRecoversAfterTransientNetworkError() {
         MockURLProtocol.reset(with: [
             .failure(URLError(.networkConnectionLost)),
-            .response(status: 200, body: validBody),
+            .response(status: 200, body: validBody)
         ])
         let result = fetch(makeService())
         XCTAssertNoThrow(try result.get())

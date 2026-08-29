@@ -97,9 +97,9 @@ struct TimezoneRow: View {
 
     private static func shiftColor(for offset: Int) -> Color? {
         switch offset {
-        case ..<0: return Color(red: 0.78, green: 0.0, blue: 0.0)
-        case 1...: return Color(red: 0.0, green: 0.47, blue: 0.0)
-        default: return nil
+        case ..<0: Color(red: 0.78, green: 0.0, blue: 0.0)
+        case 1...: Color(red: 0.0, green: 0.47, blue: 0.0)
+        default: nil
         }
     }
 
@@ -125,7 +125,7 @@ struct TimezoneRow: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { onRetry() }
-            } else if let weather = weather {
+            } else if let weather {
                 compactWeather(weather)
                 if weatherExpanded {
                     expandedWeather(weather)
@@ -177,9 +177,12 @@ struct TimezoneRow: View {
                 HStack(spacing: 12) {
                     ForEach(weather.forecasts.prefix(3), id: \.date) { forecast in
                         VStack(spacing: 2) {
-                            Text(DateFormatterManager.formatForecastDate(forecast.date))
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
+                            Text(DateFormatterManager.formatForecastDate(
+                                forecast.date,
+                                timeZone: city.timeZone
+                            ))
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
                             HStack(spacing: 3) {
                                 Text(weatherService.getWeatherEmoji(forCondition: forecast.description))
                                     .font(.system(size: 12))
@@ -247,7 +250,7 @@ struct TimezoneRow: View {
         let now = Date()
         let oneYearAgo = now.addingTimeInterval(-365 * 86400)
         let fiveYearsAhead = now.addingTimeInterval(5 * 365 * 86400)
-        return oneYearAgo...fiveYearsAhead
+        return oneYearAgo ... fiveYearsAhead
     }
 
     private func applyPickedDate(_ pickedDate: Date) {
