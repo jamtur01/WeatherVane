@@ -3,6 +3,12 @@ name: CI and Release
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,6 +23,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Install quality tools
         run: |
@@ -44,7 +52,7 @@ jobs:
         run: swift build -c release -Xswiftc -warnings-as-errors
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     needs: quality
     runs-on: macos-15
     timeout-minutes: 30
@@ -52,6 +60,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Set up signing certificate
         env:
@@ -68,17 +78,22 @@ jobs:
             -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "temporary-password" "$keychain_path"
+          identity_hash="$(security find-identity -v -p codesigning "$keychain_path" |
+            awk '$2 ~ /^[[:xdigit:]]{40}$/ { print $2; exit }')"
+          if [[ -z "$identity_hash" ]]; then
+            echo "No signing identity was found in the imported certificate." >&2
+            exit 1
+          fi
+          printf 'CODESIGN_IDENTITY=%s\n' "$identity_hash" >>"$GITHUB_ENV"
 
       - name: Build app bundle
         run: CI=1 ./build.sh
 
       - name: Sign and verify app
-        env:
-          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
         run: |
           /usr/bin/codesign --force --options runtime --timestamp \
             --keychain "$RUNNER_TEMP/build.keychain-db" \
-            --sign "$MACOS_CODESIGN_IDENTITY" Weathervane.app
+            --sign "$CODESIGN_IDENTITY" Weathervane.app
           /usr/bin/codesign --verify --deep --strict --verbose=4 Weathervane.app
 
       - name: Notarize and staple app
@@ -103,7 +118,9 @@ jobs:
 
       - name: Extract version from tag
         id: version
-        run: printf 'version=%s\n' "${GITHUB_REF#refs/tags/v}" >>"$GITHUB_OUTPUT"
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: printf 'version=%s\n' "${RELEASE_TAG#v}" >>"$GITHUB_OUTPUT"
 
       - name: Delete temporary keychain
         if: always()
@@ -120,6 +137,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: Release ${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
