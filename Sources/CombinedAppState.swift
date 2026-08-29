@@ -225,10 +225,12 @@ final class WeathervaneState: ObservableObject {
             repeats: true
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, !selectedCities.isEmpty else {
+                guard let self, !self.selectedCities.isEmpty else {
                     return
                 }
-                currentCityIndex = (currentCityIndex + 1) % selectedCities.count
+                // Swift 6.0 requires explicit self after this weak capture.
+                // swiftformat:disable:next redundantSelf
+                self.currentCityIndex = (self.currentCityIndex + 1) % self.selectedCities.count
             }
         }
     }
