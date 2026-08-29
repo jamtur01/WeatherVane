@@ -1,0 +1,27 @@
+excluded:
+  - .build
+
+line_length: 120
+
+file_length:
+  warning: 600
+  error: 600
+
+type_body_length:
+  warning: 400
+  error: 400
+
+function_body_length:
+  warning: 100
+  error: 100
+
+function_parameter_count:
+  warning: 6
+  error: 6
+
+cyclomatic_complexity:
+  warning: 8
+  error: 8
+
+opt_in_rules:
+  - force_unwrapping

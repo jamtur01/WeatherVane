@@ -1,6 +1,6 @@
 import Foundation
 
-struct TimeZoneData {
+enum TimeZoneData {
     static let allTimezones = [
         // North America
         City(code: "NYC", timeZoneIdentifier: "America/New_York", displayName: "New York", emoji: "🗽"),
@@ -17,17 +17,22 @@ struct TimeZoneData {
         City(code: "YYZ", timeZoneIdentifier: "America/Toronto", displayName: "Toronto", emoji: "🇨🇦"),
         City(code: "YOW", timeZoneIdentifier: "America/Toronto", displayName: "Ottawa", emoji: "🇨🇦"),
         City(code: "MEX", timeZoneIdentifier: "America/Mexico_City", displayName: "Mexico City", emoji: "🇲🇽"),
-        
+
         // South America
         City(code: "GRU", timeZoneIdentifier: "America/Sao_Paulo", displayName: "São Paulo", emoji: "🇧🇷"),
         City(code: "GIG", timeZoneIdentifier: "America/Sao_Paulo", displayName: "Rio de Janeiro", emoji: "🇧🇷"),
         City(code: "BSB", timeZoneIdentifier: "America/Sao_Paulo", displayName: "Brasília", emoji: "🇧🇷"),
-        City(code: "EZE", timeZoneIdentifier: "America/Argentina/Buenos_Aires", displayName: "Buenos Aires", emoji: "🇦🇷"),
+        City(
+            code: "EZE",
+            timeZoneIdentifier: "America/Argentina/Buenos_Aires",
+            displayName: "Buenos Aires",
+            emoji: "🇦🇷"
+        ),
         City(code: "SCL", timeZoneIdentifier: "America/Santiago", displayName: "Santiago", emoji: "🇨🇱"),
         City(code: "LIM", timeZoneIdentifier: "America/Lima", displayName: "Lima", emoji: "🇵🇪"),
         City(code: "BOG", timeZoneIdentifier: "America/Bogota", displayName: "Bogotá", emoji: "🇨🇴"),
         City(code: "CCS", timeZoneIdentifier: "America/Caracas", displayName: "Caracas", emoji: "🇻🇪"),
-        
+
         // Europe
         City(code: "LHR", timeZoneIdentifier: "Europe/London", displayName: "London", emoji: "🇬🇧"),
         City(code: "CDG", timeZoneIdentifier: "Europe/Paris", displayName: "Paris", emoji: "🇫🇷"),
@@ -53,7 +58,7 @@ struct TimeZoneData {
         City(code: "BUD", timeZoneIdentifier: "Europe/Budapest", displayName: "Budapest", emoji: "🇭🇺"),
         City(code: "ATH", timeZoneIdentifier: "Europe/Athens", displayName: "Athens", emoji: "🇬🇷"),
         City(code: "IST", timeZoneIdentifier: "Europe/Istanbul", displayName: "Istanbul", emoji: "🇹🇷"),
-        
+
         // Asia
         City(code: "NRT", timeZoneIdentifier: "Asia/Tokyo", displayName: "Tokyo", emoji: "🇯🇵"),
         City(code: "KIX", timeZoneIdentifier: "Asia/Tokyo", displayName: "Osaka", emoji: "🇯🇵"),
@@ -93,7 +98,7 @@ struct TimeZoneData {
         City(code: "KBL", timeZoneIdentifier: "Asia/Kabul", displayName: "Kabul", emoji: "🇦🇫"),
         City(code: "TAS", timeZoneIdentifier: "Asia/Tashkent", displayName: "Tashkent", emoji: "🇺🇿"),
         City(code: "ALA", timeZoneIdentifier: "Asia/Almaty", displayName: "Almaty", emoji: "🇰🇿"),
-        
+
         // Africa
         City(code: "CAI", timeZoneIdentifier: "Africa/Cairo", displayName: "Cairo", emoji: "🇪🇬"),
         City(code: "JNB", timeZoneIdentifier: "Africa/Johannesburg", displayName: "Johannesburg", emoji: "🇿🇦"),
@@ -114,7 +119,7 @@ struct TimeZoneData {
         City(code: "DAR", timeZoneIdentifier: "Africa/Dar_es_Salaam", displayName: "Dar es Salaam", emoji: "🇹🇿"),
         City(code: "KGL", timeZoneIdentifier: "Africa/Kigali", displayName: "Kigali", emoji: "🇷🇼"),
         City(code: "KMP", timeZoneIdentifier: "Africa/Kampala", displayName: "Kampala", emoji: "🇺🇬"),
-        
+
         // Oceania
         City(code: "SYD", timeZoneIdentifier: "Australia/Sydney", displayName: "Sydney", emoji: "🇦🇺"),
         City(code: "MEL", timeZoneIdentifier: "Australia/Melbourne", displayName: "Melbourne", emoji: "🇦🇺"),
@@ -129,7 +134,7 @@ struct TimeZoneData {
         City(code: "PPT", timeZoneIdentifier: "Pacific/Tahiti", displayName: "Papeete", emoji: "🇵🇫"),
         City(code: "HNL", timeZoneIdentifier: "Pacific/Honolulu", displayName: "Honolulu", emoji: "🏝️"),
         City(code: "ANC", timeZoneIdentifier: "America/Anchorage", displayName: "Anchorage", emoji: "🐻"),
-        
+
         // Additional Major Cities
         City(code: "REK", timeZoneIdentifier: "Atlantic/Reykjavik", displayName: "Reykjavik", emoji: "🇮🇸"),
         City(code: "TIP", timeZoneIdentifier: "Africa/Tripoli", displayName: "Tripoli", emoji: "🇱🇾"),

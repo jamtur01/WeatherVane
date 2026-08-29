@@ -1,5 +1,5 @@
-import XCTest
 @testable import Weathervane
+import XCTest
 
 final class RecoveryScheduleTests: XCTestCase {
     func testRecoveryDelayBacksOffExponentially() {
