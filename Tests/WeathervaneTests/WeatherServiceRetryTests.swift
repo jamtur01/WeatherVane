@@ -1,37 +1,39 @@
 @testable import Weathervane
 import XCTest
 
+@MainActor
 final class WeatherServiceRetryTests: XCTestCase {
-    private var validBody: Data {
-        Data(WeatherFixture.json.utf8)
+    private func validBody() throws -> Data {
+        try Data(WeatherFixture.json().utf8)
     }
 
     private func makeService(maxRetries: Int = 3) -> WeatherService {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [MockURLProtocol.self]
-        let session = URLSession(configuration: config)
-        // Zero base delay keeps retries instant for tests.
-        return WeatherService(urlSession: session, maxRetries: maxRetries, retryBaseDelay: 0)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        return WeatherService(
+            urlSession: session,
+            maxRetries: maxRetries,
+            retryBaseDelay: 0
+        )
     }
 
-    private func fetch(_ service: WeatherService) -> Result<WeatherData, Error> {
-        let expectation = expectation(description: "fetch")
-        var captured: Result<WeatherData, Error>!
-        service.fetchWeather(cityName: "Chicago", timeZone: .current) { result in
-            captured = result
-            expectation.fulfill()
+    private func fetch(_ service: WeatherService) async -> Result<WeatherData, Error> {
+        do {
+            return try await .success(service.fetchWeather(
+                cityName: "Chicago",
+                timeZone: .current
+            ))
+        } catch {
+            return .failure(error)
         }
-        wait(for: [expectation], timeout: 2)
-        return captured
     }
-
-    // MARK: - isRetryable
 
     func testServerAndRateLimitErrorsAreRetryable() {
         XCTAssertTrue(WeatherService.isRetryable(.invalidResponse(statusCode: 500)))
         XCTAssertTrue(WeatherService.isRetryable(.invalidResponse(statusCode: 503)))
         XCTAssertTrue(WeatherService.isRetryable(.invalidResponse(statusCode: 429)))
-        XCTAssertTrue(WeatherService.isRetryable(.networkError(URLError(.timedOut))))
+        XCTAssertTrue(WeatherService.isRetryable(.networkError("timed out")))
     }
 
     func testDeterministicErrorsAreNotRetryable() {
@@ -39,49 +41,60 @@ final class WeatherServiceRetryTests: XCTestCase {
         XCTAssertFalse(WeatherService.isRetryable(.invalidResponse(statusCode: 400)))
         XCTAssertFalse(WeatherService.isRetryable(.invalidCityName))
         XCTAssertFalse(WeatherService.isRetryable(.invalidWeatherData))
-        XCTAssertFalse(WeatherService.isRetryable(.decodingError(URLError(.cannotParseResponse))))
+        XCTAssertFalse(WeatherService.isRetryable(.decodingError("cannot parse")))
     }
 
-    // MARK: - retry behavior
-
-    func testRecoversAfterTransient500() {
-        MockURLProtocol.reset(with: [
+    func testRecoversAfterTransient500() async throws {
+        try MockURLProtocol.reset(with: [
             .response(status: 500, body: Data()),
-            .response(status: 200, body: validBody)
+            .response(status: 200, body: validBody())
         ])
-        let result = fetch(makeService())
-        XCTAssertNoThrow(try result.get())
-        XCTAssertEqual(MockURLProtocol.requestCount, 2, "should retry once then succeed")
-    }
-
-    func testRecoversAfterTransientNetworkError() {
-        MockURLProtocol.reset(with: [
-            .failure(URLError(.networkConnectionLost)),
-            .response(status: 200, body: validBody)
-        ])
-        let result = fetch(makeService())
+        let result = await fetch(makeService())
         XCTAssertNoThrow(try result.get())
         XCTAssertEqual(MockURLProtocol.requestCount, 2)
     }
 
-    func testGivesUpAfterMaxRetries() {
+    func testRecoversAfterTransientNetworkError() async throws {
+        try MockURLProtocol.reset(with: [
+            .failure(URLError(.networkConnectionLost)),
+            .response(status: 200, body: validBody())
+        ])
+        let result = await fetch(makeService())
+        XCTAssertNoThrow(try result.get())
+        XCTAssertEqual(MockURLProtocol.requestCount, 2)
+    }
+
+    func testGivesUpAfterMaxRetries() async {
         MockURLProtocol.reset(with: [.response(status: 500, body: Data())])
-        let result = fetch(makeService(maxRetries: 3))
+        let result = await fetch(makeService(maxRetries: 3))
         XCTAssertThrowsError(try result.get())
-        XCTAssertEqual(MockURLProtocol.requestCount, 4, "1 initial + 3 retries")
+        XCTAssertEqual(MockURLProtocol.requestCount, 4)
     }
 
-    func testDoesNotRetryNonRetryableStatus() {
+    func testDoesNotRetryNonRetryableStatus() async {
         MockURLProtocol.reset(with: [.response(status: 404, body: Data())])
-        let result = fetch(makeService())
+        let result = await fetch(makeService())
         XCTAssertThrowsError(try result.get())
-        XCTAssertEqual(MockURLProtocol.requestCount, 1, "404 must fail fast")
+        XCTAssertEqual(MockURLProtocol.requestCount, 1)
     }
 
-    func testDoesNotRetryMalformedJSON() {
-        MockURLProtocol.reset(with: [.response(status: 200, body: Data("not json".utf8))])
-        let result = fetch(makeService())
+    func testDoesNotRetryMalformedJSON() async {
+        MockURLProtocol.reset(with: [
+            .response(status: 200, body: Data("not json".utf8))
+        ])
+        let result = await fetch(makeService())
         XCTAssertThrowsError(try result.get())
-        XCTAssertEqual(MockURLProtocol.requestCount, 1, "decode failure is deterministic")
+        XCTAssertEqual(MockURLProtocol.requestCount, 1)
+    }
+
+    func testDoesNotRetryCancelledRequest() async {
+        MockURLProtocol.reset(with: [.failure(URLError(.cancelled))])
+
+        let result = await fetch(makeService())
+
+        XCTAssertThrowsError(try result.get()) { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(MockURLProtocol.requestCount, 1)
     }
 }

@@ -2,16 +2,12 @@ import Foundation
 import os
 import SwiftUI
 
+@MainActor
 final class WeathervaneState: ObservableObject {
     private static let selectedCityCodesKey = "selectedCityCodes"
-    private let logger = Logger(subsystem: "net.lovedthanlost.weathervane", category: "state")
 
-    /// Time zone state
-    @Published var selectedCities: [City] = []
-    // Drives the rotating menu-bar title only; read directly (not via Combine),
-    // so it is intentionally not @Published to avoid re-rendering the popover.
-    var currentCityIndex = 0
-    @Published var virtualNow: Date? = nil {
+    @Published private(set) var selectedCities: [City]
+    @Published private(set) var virtualNow: Date? {
         didSet {
             if virtualNow == nil {
                 startLiveTickTimer()
@@ -21,6 +17,18 @@ final class WeathervaneState: ObservableObject {
         }
     }
 
+    @Published private(set) var weatherDataByCity: [String: WeatherData] = [:]
+    @Published private(set) var loadingCities: Set<String> = []
+    @Published private(set) var errorsByCity: [String: String] = [:]
+    @Published var use24HourTime: Bool {
+        didSet {
+            userDefaults.set(use24HourTime, forKey: Constants.use24HourTimeKey)
+        }
+    }
+
+    private(set) var currentCityIndex = 0
+    let allAvailableTimezones: [City]
+
     var effectiveNow: Date {
         virtualNow ?? Date()
     }
@@ -29,54 +37,186 @@ final class WeathervaneState: ObservableObject {
         virtualNow != nil
     }
 
-    // Weather state - per city
-    @Published var weatherDataByCity: [String: WeatherData] = [:]
-    @Published var loadingCities: Set<String> = []
-    @Published var errorsByCity: [String: String] = [:]
-
-    @Published var use24HourTime: Bool = {
-        if UserDefaults.standard.object(forKey: Constants.use24HourTimeKey) == nil {
-            return Constants.defaultUse24Hour
+    var currentDisplayCity: City? {
+        guard selectedCities.indices.contains(currentCityIndex) else {
+            return selectedCities.first
         }
-        return UserDefaults.standard.bool(forKey: Constants.use24HourTimeKey)
-    }() {
-        didSet {
-            UserDefaults.standard.set(use24HourTime, forKey: Constants.use24HourTimeKey)
-        }
+        return selectedCities[currentCityIndex]
     }
 
-    private let weatherService = WeatherService.shared
+    private let logger = Logger(
+        subsystem: "net.lovedthanlost.weathervane",
+        category: "state"
+    )
+    private let weatherService: any WeatherFetching
+    private let userDefaults: UserDefaults
     private var weatherTimer: Timer?
     private var cityRotationTimer: Timer?
     private var liveTickTimer: Timer?
     private var isPopoverOpen = false
-
-    // Per-city quick recovery after a transient failure (keyed by displayName).
+    private var weatherBatchTask: Task<Void, Never>?
+    private var weatherTasks: [String: Task<Void, Never>] = [:]
+    private var recoveryTasks: [String: Task<Void, Never>] = [:]
     private var recoveryAttempts: [String: Int] = [:]
-    private var recoveryWorkItems: [String: DispatchWorkItem] = [:]
+    private var requestGenerations: [String: Int] = [:]
 
-    let allAvailableTimezones = TimeZoneManager.getAllAvailableCities()
-
-    var currentDisplayCity: City? {
-        guard !selectedCities.isEmpty else { return nil }
-        return selectedCities[currentCityIndex]
-    }
-
-    init() {
+    init(
+        weatherService: any WeatherFetching = WeatherService.shared,
+        userDefaults: UserDefaults = .standard,
+        startsBackgroundWork: Bool = true
+    ) {
+        self.weatherService = weatherService
+        self.userDefaults = userDefaults
+        allAvailableTimezones = TimeZoneManager.getAllAvailableCities()
+        selectedCities = []
+        virtualNow = nil
+        use24HourTime = Self.loadTimeFormat(from: userDefaults)
         selectedCities = loadSavedCities()
+
+        guard startsBackgroundWork else {
+            return
+        }
         startCityRotationTimer()
         fetchAllWeather()
         startWeatherTimer()
     }
 
-    deinit {
+    func shutdown() {
         weatherTimer?.invalidate()
+        weatherTimer = nil
         cityRotationTimer?.invalidate()
+        cityRotationTimer = nil
         liveTickTimer?.invalidate()
-        recoveryWorkItems.values.forEach { $0.cancel() }
+        liveTickTimer = nil
+        cancelAllWeatherWork()
     }
 
-    // MARK: - Time Zone Methods
+    func getTimeString(for city: City, shortFormat: Bool = false) -> String {
+        if shortFormat {
+            return DateFormatterManager.formatShortTime(
+                for: city,
+                date: effectiveNow,
+                use24Hour: use24HourTime
+            )
+        }
+        return DateFormatterManager.formatLongTime(
+            for: city,
+            date: effectiveNow,
+            use24Hour: use24HourTime
+        )
+    }
+
+    func setVirtualNow(_ date: Date) {
+        virtualNow = date
+    }
+
+    func resetTime() {
+        virtualNow = nil
+    }
+
+    func popoverDidOpen() {
+        isPopoverOpen = true
+        startLiveTickTimer()
+    }
+
+    func popoverDidClose() {
+        isPopoverOpen = false
+        resetTime()
+    }
+
+    func updateSelectedCities(_ cities: [City]) {
+        cancelAllWeatherWork()
+        selectedCities = Array(
+            TimeZoneManager.sortCitiesByTimezone(cities)
+                .prefix(Constants.maxCitiesToDisplay)
+        )
+        currentCityIndex = 0
+        pruneWeatherState(toKeep: Set(selectedCities.map(\.code)))
+        saveCities()
+        fetchAllWeather()
+    }
+
+    func fetchAllWeather() {
+        cancelAllWeatherWork()
+        let cities = selectedCities
+        weatherBatchTask = Task { @MainActor [weak self] in
+            for (index, city) in cities.enumerated() {
+                if index > 0 {
+                    do {
+                        try await Task.sleep(for: .seconds(Constants.weatherRequestDelay))
+                    } catch {
+                        return
+                    }
+                }
+                guard let self, isSelected(city) else {
+                    continue
+                }
+                fetchWeather(for: city)
+            }
+        }
+    }
+
+    func fetchWeather(for city: City) {
+        guard isSelected(city) else {
+            return
+        }
+        recoveryTasks[city.code]?.cancel()
+        recoveryTasks[city.code] = nil
+        startWeatherRequest(for: city)
+    }
+
+    func getWeather(for city: City) -> WeatherData? {
+        weatherDataByCity[city.code]
+    }
+
+    func isLoading(for city: City) -> Bool {
+        loadingCities.contains(city.code)
+    }
+
+    func getError(for city: City) -> String? {
+        errorsByCity[city.code]
+    }
+
+    nonisolated static func recoveryDelay(forAttempt attempt: Int) -> TimeInterval {
+        Constants.weatherRecoveryBaseDelay * pow(2, Double(attempt))
+    }
+
+    static func cities(
+        forSavedCodes codes: [String]?,
+        availableCities: [City]
+    ) -> [City] {
+        guard let codes else {
+            return defaultCities(from: availableCities)
+        }
+        guard !codes.isEmpty else {
+            return []
+        }
+
+        let cities = codes.compactMap { code in
+            availableCities.first { $0.code == code }
+        }
+        guard !cities.isEmpty else {
+            return defaultCities(from: availableCities)
+        }
+        return Array(
+            TimeZoneManager.sortCitiesByTimezone(cities)
+                .prefix(Constants.maxCitiesToDisplay)
+        )
+    }
+
+    private static func loadTimeFormat(from userDefaults: UserDefaults) -> Bool {
+        guard userDefaults.object(forKey: Constants.use24HourTimeKey) != nil else {
+            return Constants.defaultUse24Hour
+        }
+        return userDefaults.bool(forKey: Constants.use24HourTimeKey)
+    }
+
+    private static func defaultCities(from availableCities: [City]) -> [City] {
+        let cities = Constants.defaultCityCodes.compactMap { code in
+            availableCities.first { $0.code == code }
+        }
+        return TimeZoneManager.sortCitiesByTimezone(cities)
+    }
 
     private func startCityRotationTimer() {
         cityRotationTimer?.invalidate()
@@ -84,44 +224,13 @@ final class WeathervaneState: ObservableObject {
             withTimeInterval: Constants.cityRotationInterval,
             repeats: true
         ) { [weak self] _ in
-            guard let self, !self.selectedCities.isEmpty else { return }
-            currentCityIndex = (currentCityIndex + 1) % selectedCities.count
+            Task { @MainActor [weak self] in
+                guard let self, !selectedCities.isEmpty else {
+                    return
+                }
+                currentCityIndex = (currentCityIndex + 1) % selectedCities.count
+            }
         }
-    }
-
-    @MainActor
-    func getTimeString(for city: City, shortFormat: Bool = false) -> String {
-        let baseDate = effectiveNow
-        return shortFormat
-            ? DateFormatterManager.formatShortTime(for: city, date: baseDate, use24Hour: use24HourTime)
-            : DateFormatterManager.formatLongTime(for: city, date: baseDate, use24Hour: use24HourTime)
-    }
-
-    @MainActor
-    func setVirtualNow(_ date: Date) {
-        virtualNow = date
-    }
-
-    @MainActor
-    func adjustVirtualNow(by seconds: TimeInterval) {
-        virtualNow = (virtualNow ?? Date()).addingTimeInterval(seconds)
-    }
-
-    @MainActor
-    func resetTime() {
-        virtualNow = nil
-    }
-
-    @MainActor
-    func popoverDidOpen() {
-        isPopoverOpen = true
-        startLiveTickTimer()
-    }
-
-    @MainActor
-    func popoverDidClose() {
-        isPopoverOpen = false
-        resetTime()
     }
 
     private func startLiveTickTimer() {
@@ -130,8 +239,8 @@ final class WeathervaneState: ObservableObject {
             return
         }
         liveTickTimer?.invalidate()
-        liveTickTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async {
+        liveTickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
                 self?.objectWillChange.send()
             }
         }
@@ -142,171 +251,191 @@ final class WeathervaneState: ObservableObject {
         liveTickTimer = nil
     }
 
-    func updateSelectedCities(_ cities: [City]) {
-        cancelAllRecovery()
-        selectedCities = TimeZoneManager.sortCitiesByTimezone(cities)
-        currentCityIndex = 0
-        pruneWeatherState(toKeep: Set(selectedCities.map(\.displayName)))
-        saveCities()
-        fetchAllWeather()
-    }
-
-    /// Drop cached weather/error/loading entries for cities no longer selected.
-    private func pruneWeatherState(toKeep keys: Set<String>) {
-        weatherDataByCity = weatherDataByCity.filter { keys.contains($0.key) }
-        errorsByCity = errorsByCity.filter { keys.contains($0.key) }
-        loadingCities = loadingCities.filter { keys.contains($0) }
-    }
-
-    private func cancelAllRecovery() {
-        recoveryWorkItems.values.forEach { $0.cancel() }
-        recoveryWorkItems.removeAll()
-        recoveryAttempts.removeAll()
-    }
-
-    // MARK: - Persistence
-
-    private func saveCities() {
-        let codes = selectedCities.map(\.code)
-        UserDefaults.standard.set(codes, forKey: Self.selectedCityCodesKey)
-    }
-
-    private func loadSavedCities() -> [City] {
-        guard let codes = UserDefaults.standard.stringArray(
-            forKey: Self.selectedCityCodesKey
-        ) else {
-            return TimeZoneManager.getDefaultCities()
-        }
-        let cities = codes.compactMap { code in
-            allAvailableTimezones.first { $0.code == code }
-        }
-        guard !cities.isEmpty else {
-            return TimeZoneManager.getDefaultCities()
-        }
-        return TimeZoneManager.sortCitiesByTimezone(cities)
-    }
-
-    // MARK: - Weather Methods
-
     private func startWeatherTimer() {
         weatherTimer?.invalidate()
         weatherTimer = Timer.scheduledTimer(
             withTimeInterval: Constants.weatherUpdateInterval,
             repeats: true
         ) { [weak self] _ in
-            self?.fetchAllWeather()
-        }
-    }
-
-    /// Fetches weather data for all selected cities with staggered delays to avoid rate limiting.
-    ///
-    /// Note: This implementation uses sequential delays (1.0s between requests) to avoid
-    /// overwhelming the wttr.in API. For users with many cities selected (up to 50 per
-    /// Constants.maxCitiesToDisplay), this can result in significant delays:
-    /// - 10 cities: ~10 second delay before all data is fetched
-    /// - 25 cities: ~25 second delay
-    /// - 50 cities: ~50 second delay
-    ///
-    /// Weather data will appear gradually as each request completes. This is preferable
-    /// to being rate-limited or banned by the API, which would prevent all weather data
-    /// from loading.
-    func fetchAllWeather() {
-        // Add delays between API calls to avoid rate limiting
-        for (index, city) in selectedCities.enumerated() {
-            let delay = Double(index) * Constants.weatherRequestDelay
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.fetchWeather(for: city)
+            Task { @MainActor [weak self] in
+                self?.fetchAllWeather()
             }
         }
     }
 
-    /// Primary query: the city's full name, which wttr.in resolves reliably.
-    private func primaryQuery(for city: City) -> String {
-        city.displayName
+    private func saveCities() {
+        userDefaults.set(
+            selectedCities.map(\.code),
+            forKey: Self.selectedCityCodesKey
+        )
     }
 
-    /// Fallback query: the name with spaces removed (e.g. "New York" -> "NewYork").
-    /// Gives a distinct second query for multi-word names; equals the primary for
-    /// single-word names, in which case the fallback request is skipped.
-    private func fallbackQuery(for city: City) -> String {
-        city.displayName.replacingOccurrences(of: " ", with: "")
+    private func loadSavedCities() -> [City] {
+        guard userDefaults.object(forKey: Self.selectedCityCodesKey) != nil else {
+            return Self.cities(
+                forSavedCodes: nil,
+                availableCities: allAvailableTimezones
+            )
+        }
+        guard let codes = userDefaults.stringArray(forKey: Self.selectedCityCodesKey) else {
+            logger.error("Saved city codes have an invalid format; using defaults")
+            return Self.cities(
+                forSavedCodes: nil,
+                availableCities: allAvailableTimezones
+            )
+        }
+        return Self.cities(
+            forSavedCodes: codes,
+            availableCities: allAvailableTimezones
+        )
     }
 
-    func fetchWeather(for city: City) {
-        let cityKey = city.displayName
-        recoveryWorkItems[cityKey]?.cancel()
-        recoveryWorkItems[cityKey] = nil
-
-        loadingCities.insert(cityKey)
-        errorsByCity.removeValue(forKey: cityKey)
-
-        attemptFetch(for: city, query: primaryQuery(for: city), isFallback: false)
+    private func pruneWeatherState(toKeep codes: Set<String>) {
+        weatherDataByCity = weatherDataByCity.filter { codes.contains($0.key) }
+        errorsByCity = errorsByCity.filter { codes.contains($0.key) }
+        loadingCities = loadingCities.filter { codes.contains($0) }
     }
 
-    private func attemptFetch(for city: City, query: String, isFallback: Bool) {
-        let cityKey = city.displayName
-        weatherService.fetchWeather(cityName: query, timeZone: city.timeZone) { [weak self] result in
-            guard let self else { return }
-            DispatchQueue.main.async {
-                switch result {
-                case let .success(data):
-                    self.loadingCities.remove(cityKey)
-                    self.weatherDataByCity[cityKey] = data
-                    self.errorsByCity.removeValue(forKey: cityKey)
-                    self.recoveryAttempts[cityKey] = nil
-                case let .failure(error):
-                    let fallback = self.fallbackQuery(for: city)
-                    if !isFallback, fallback != query {
-                        self.logger.warning("Weather fetch failed for '\(cityKey, privacy: .public)' using '\(query, privacy: .public)' (\(error.localizedDescription, privacy: .public)); trying fallback '\(fallback, privacy: .public)'")
-                        self.attemptFetch(for: city, query: fallback, isFallback: true)
-                    } else {
-                        self.loadingCities.remove(cityKey)
-                        self.errorsByCity[cityKey] = error.localizedDescription
-                        self.logger.error("Weather fetch failed for '\(cityKey, privacy: .public)': \(error.localizedDescription, privacy: .public)")
-                        self.scheduleRecovery(for: city, error: error)
-                    }
-                }
+    private func isSelected(_ city: City) -> Bool {
+        selectedCities.contains { $0.code == city.code }
+    }
+
+    private func startWeatherRequest(for city: City) {
+        weatherTasks[city.code]?.cancel()
+        let generation = (requestGenerations[city.code] ?? 0) + 1
+        requestGenerations[city.code] = generation
+        loadingCities.insert(city.code)
+        errorsByCity[city.code] = nil
+
+        let service = weatherService
+        let logger = logger
+        let primaryQuery = city.displayName
+        let fallbackQuery = city.displayName.replacingOccurrences(of: " ", with: "")
+        weatherTasks[city.code] = Task { @MainActor [weak self] in
+            do {
+                let data = try await Self.retrieveWeather(
+                    service: service,
+                    city: city,
+                    primaryQuery: primaryQuery,
+                    fallbackQuery: fallbackQuery,
+                    logger: logger
+                )
+                try Task.checkCancellation()
+                self?.completeWeatherRequest(
+                    for: city,
+                    generation: generation,
+                    result: .success(data)
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.completeWeatherRequest(
+                    for: city,
+                    generation: generation,
+                    result: .failure(error)
+                )
             }
         }
     }
 
-    /// After a transient failure, re-poll just this city sooner than the next full
-    /// poll, backing off and capping attempts before deferring to the normal cycle.
+    private nonisolated static func retrieveWeather(
+        service: any WeatherFetching,
+        city: City,
+        primaryQuery: String,
+        fallbackQuery: String,
+        logger: Logger
+    ) async throws -> WeatherData {
+        do {
+            return try await service.fetchWeather(
+                cityName: primaryQuery,
+                timeZone: city.timeZone
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            guard fallbackQuery != primaryQuery else {
+                throw error
+            }
+            let message = "Weather fetch failed for \(city.code) using " +
+                "\(primaryQuery); trying \(fallbackQuery)"
+            logger.warning("\(message, privacy: .public)")
+            return try await service.fetchWeather(
+                cityName: fallbackQuery,
+                timeZone: city.timeZone
+            )
+        }
+    }
+
+    private func completeWeatherRequest(
+        for city: City,
+        generation: Int,
+        result: Result<WeatherData, Error>
+    ) {
+        guard requestGenerations[city.code] == generation,
+              isSelected(city) else {
+            return
+        }
+        weatherTasks[city.code] = nil
+        loadingCities.remove(city.code)
+
+        switch result {
+        case let .success(data):
+            weatherDataByCity[city.code] = data
+            errorsByCity[city.code] = nil
+            recoveryAttempts[city.code] = nil
+        case let .failure(error):
+            errorsByCity[city.code] = error.localizedDescription
+            let message = "Weather fetch failed for \(city.code): \(error.localizedDescription)"
+            logger.error("\(message, privacy: .public)")
+            scheduleRecovery(for: city, error: error)
+        }
+    }
+
     private func scheduleRecovery(for city: City, error: Error) {
-        let cityKey = city.displayName
         guard let networkError = error as? NetworkError,
               WeatherService.isRetryable(networkError) else {
-            recoveryAttempts[cityKey] = nil
+            recoveryAttempts[city.code] = nil
             return
         }
 
-        let attempt = recoveryAttempts[cityKey] ?? 0
-        guard attempt < Constants.maxWeatherRecoveryAttempts else { return }
-        recoveryAttempts[cityKey] = attempt + 1
-
-        let delay = Self.recoveryDelay(forAttempt: attempt)
-        let work = DispatchWorkItem { [weak self] in
-            self?.recoveryWorkItems[cityKey] = nil
-            self?.fetchWeather(for: city)
+        let attempt = recoveryAttempts[city.code] ?? 0
+        guard attempt < Constants.maxWeatherRecoveryAttempts else {
+            return
         }
-        recoveryWorkItems[cityKey] = work
-        logger.info("Scheduling weather recovery for '\(cityKey, privacy: .public)' in \(delay, privacy: .public)s (attempt \(attempt + 1)/\(Constants.maxWeatherRecoveryAttempts))")
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        recoveryAttempts[city.code] = attempt + 1
+        let delay = Self.recoveryDelay(forAttempt: attempt)
+        let message = "Scheduling weather recovery for \(city.code) in \(delay)s; " +
+            "attempt \(attempt + 1)/\(Constants.maxWeatherRecoveryAttempts)"
+        logger.info("\(message, privacy: .public)")
+
+        recoveryTasks[city.code]?.cancel()
+        recoveryTasks[city.code] = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            guard let self, isSelected(city) else {
+                return
+            }
+            recoveryTasks[city.code] = nil
+            fetchWeather(for: city)
+        }
     }
 
-    static func recoveryDelay(forAttempt attempt: Int) -> TimeInterval {
-        Constants.weatherRecoveryBaseDelay * pow(2.0, Double(attempt))
-    }
+    private func cancelAllWeatherWork() {
+        weatherBatchTask?.cancel()
+        weatherBatchTask = nil
 
-    func getWeather(for city: City) -> WeatherData? {
-        weatherDataByCity[city.displayName]
-    }
+        for code in weatherTasks.keys {
+            requestGenerations[code, default: 0] += 1
+        }
+        weatherTasks.values.forEach { $0.cancel() }
+        weatherTasks.removeAll()
+        loadingCities.removeAll()
 
-    func isLoading(for city: City) -> Bool {
-        loadingCities.contains(city.displayName)
-    }
-
-    func getError(for city: City) -> String? {
-        errorsByCity[city.displayName]
+        recoveryTasks.values.forEach { $0.cancel() }
+        recoveryTasks.removeAll()
+        recoveryAttempts.removeAll()
     }
 }

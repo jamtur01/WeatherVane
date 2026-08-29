@@ -1,13 +1,11 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
-class AppDelegate: NSObject, NSApplicationDelegate {
-    static private(set) var instance: AppDelegate!
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var statusBarController = CombinedStatusBarController()
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        AppDelegate.instance = self
-
+    func applicationDidFinishLaunching(_: Notification) {
         // Hide from dock
         NSApp.setActivationPolicy(.accessory)
 
@@ -15,7 +13,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusBarController.setup()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    func applicationWillTerminate(_: Notification) {
         statusBarController.cleanup()
     }
 }

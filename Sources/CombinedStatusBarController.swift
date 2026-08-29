@@ -1,6 +1,7 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
+@MainActor
 final class CombinedStatusBarController {
     private var statusBar: NSStatusBar
     private var statusItem: NSStatusItem
@@ -9,7 +10,7 @@ final class CombinedStatusBarController {
     private var updateTimer: Timer?
     private var eventMonitor: Any?
     var settingsWindow: NSWindow?
-    internal var settingsWindowDelegate: NSWindowDelegate?
+    var settingsWindowDelegate: NSWindowDelegate?
 
     init() {
         statusBar = NSStatusBar.system
@@ -27,12 +28,14 @@ final class CombinedStatusBarController {
         startUpdateTimer()
     }
 
-    deinit {
-        updateTimer?.invalidate()
-    }
-
     func cleanup() {
         updateTimer?.invalidate()
+        updateTimer = nil
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+            self.eventMonitor = nil
+        }
+        appState.shutdown()
     }
 
     private func setupPopover() {
@@ -106,7 +109,7 @@ final class CombinedStatusBarController {
         }
     }
 
-    private func showPopover(sender: AnyObject?) {
+    private func showPopover(sender _: AnyObject?) {
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: NSRectEdge.minY)
         }
@@ -148,7 +151,12 @@ final class CombinedStatusBarController {
         settingsWindow?.close()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: Constants.settingsWindowWidth, height: Constants.settingsWindowHeight),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: Constants.settingsWindowWidth,
+                height: Constants.settingsWindowHeight
+            ),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false

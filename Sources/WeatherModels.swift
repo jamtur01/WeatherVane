@@ -1,58 +1,42 @@
-// Weather models based on wttr.in JSON format
-struct WeatherResponse: Codable {
+/// Weather models based on wttr.in JSON format
+struct WeatherResponse: Codable, Sendable {
     let currentCondition: [CurrentCondition]
-    let nearestArea: [NearestArea]
     let weather: [Weather]
-    
+
     enum CodingKeys: String, CodingKey {
         case currentCondition = "current_condition"
-        case nearestArea = "nearest_area"
         case weather
     }
 }
 
-struct CurrentCondition: Codable {
+struct CurrentCondition: Codable, Sendable {
     let tempC: String
     let weatherDesc: [WeatherDesc]
     let feelsLikeC: String
     let humidity: String
     let windspeedKmph: String
-    let winddir16Point: String
-    let pressure: String
-    let visibility: String
 
     enum CodingKeys: String, CodingKey {
         case tempC = "temp_C"
-        case weatherDesc = "weatherDesc"
+        case weatherDesc
         case feelsLikeC = "FeelsLikeC"
         case humidity
         case windspeedKmph
-        case winddir16Point
-        case pressure
-        case visibility
     }
 }
 
-struct WeatherDesc: Codable {
+struct WeatherDesc: Codable, Sendable {
     let value: String
 }
 
-struct NearestArea: Codable {
-    let areaName: [AreaName]
-}
-
-struct AreaName: Codable {
-    let value: String
-}
-
-struct Weather: Codable {
+struct Weather: Codable, Sendable {
     let date: String
     let maxtempC: String
     let mintempC: String
     let hourly: [Hourly]
 }
 
-struct Hourly: Codable {
+struct Hourly: Codable, Sendable {
     let weatherDesc: [WeatherDesc]
     let chanceOfRain: String?
 

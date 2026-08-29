@@ -1,6 +1,7 @@
-import Foundation
 import AppKit
+import Foundation
 
+@MainActor
 final class SettingsWindowDelegate: NSObject, NSWindowDelegate {
     weak var statusBarController: CombinedStatusBarController?
 
@@ -9,8 +10,8 @@ final class SettingsWindowDelegate: NSObject, NSWindowDelegate {
         super.init()
     }
 
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        return true
+    func windowShouldClose(_: NSWindow) -> Bool {
+        true
     }
 
     func windowWillClose(_ notification: Notification) {

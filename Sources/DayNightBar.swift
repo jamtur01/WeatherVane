@@ -38,7 +38,7 @@ struct DayNightBar: View {
     private func tickMarks(width: CGFloat) -> some View {
         ForEach(0 ..< tickCount, id: \.self) { tick in
             let hour = Double(tick) / 4.0
-            let x = CGFloat(tick) / CGFloat(tickCount - 1) * width
+            let position = CGFloat(tick) / CGFloat(tickCount - 1) * width
             let isMajor = tick % 24 == 0
             let isHour = tick % 4 == 0
             let height: CGFloat = isMajor ? 14 : (isHour ? 9 : 5)
@@ -48,12 +48,12 @@ struct DayNightBar: View {
             Rectangle()
                 .fill(color)
                 .frame(width: 1, height: height)
-                .position(x: x, y: totalHeight / 2)
+                .position(x: position, y: totalHeight / 2)
         }
     }
 
     private func marker(width: CGFloat) -> some View {
-        let x = markerPosition(in: width)
+        let position = markerPosition(in: width)
         return ZStack {
             Circle()
                 .fill(Color(white: 0.92))
@@ -66,7 +66,7 @@ struct DayNightBar: View {
             .foregroundColor(Color(white: 0.35))
         }
         .frame(width: markerSize, height: markerSize)
-        .position(x: x, y: totalHeight / 2)
+        .position(x: position, y: totalHeight / 2)
     }
 
     private func markerPosition(in width: CGFloat) -> CGFloat {
@@ -109,7 +109,7 @@ struct DayNightBar: View {
             }
     }
 
-    static func targetDate(
+    nonisolated static func targetDate(
         forFraction fraction: Double,
         on day: Date,
         in timeZone: TimeZone

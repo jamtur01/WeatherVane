@@ -1,13 +1,8 @@
 import Foundation
 
-struct TimeZoneManager {
-    private static var _sortedCities: [City]?
-    private static let sortedCitiesQueue = DispatchQueue(
-        label: "com.centraltime.sortedCities"
-    )
-
+enum TimeZoneManager {
     private static func sortByTimezoneOffset(_ cities: [City]) -> [City] {
-        return cities.sorted { city1, city2 in
+        cities.sorted { city1, city2 in
             let offset1 = city1.timeZone.secondsFromGMT()
             let offset2 = city2.timeZone.secondsFromGMT()
             return offset1 < offset2
@@ -15,15 +10,7 @@ struct TimeZoneManager {
     }
 
     static func getAllAvailableCities() -> [City] {
-        return sortedCitiesQueue.sync {
-            if let cached = _sortedCities {
-                return cached
-            }
-
-            let sorted = sortByTimezoneOffset(TimeZoneData.allTimezones)
-            _sortedCities = sorted
-            return sorted
-        }
+        sortByTimezoneOffset(TimeZoneData.allTimezones)
     }
 
     static func getDefaultCities() -> [City] {
@@ -36,6 +23,6 @@ struct TimeZoneManager {
     }
 
     static func sortCitiesByTimezone(_ cities: [City]) -> [City] {
-        return sortByTimezoneOffset(cities)
+        sortByTimezoneOffset(cities)
     }
 }

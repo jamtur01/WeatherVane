@@ -10,8 +10,8 @@ final class MockURLProtocol: URLProtocol {
     }
 
     private static let lock = NSLock()
-    private static var stubs: [Stub] = []
-    private static var count = 0
+    private nonisolated(unsafe) static var stubs: [Stub] = [] // Access is serialized by `lock`.
+    private nonisolated(unsafe) static var count = 0 // Access is serialized by `lock`.
 
     static func reset(with stubs: [Stub]) {
         lock.lock()
@@ -34,18 +34,35 @@ final class MockURLProtocol: URLProtocol {
         return stubs[index]
     }
 
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    // URLProtocol requires a class override.
+    // swiftlint:disable:next static_over_final_class
+    override class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    // URLProtocol requires a class override.
+    // swiftlint:disable:next static_over_final_class
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
     override func stopLoading() {}
 
     override func startLoading() {
         switch MockURLProtocol.nextStub() {
-        case .failure(let error):
+        case let .failure(error):
             client?.urlProtocol(self, didFailWithError: error)
-        case .response(let status, let body):
-            let response = HTTPURLResponse(
-                url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil
-            )!
+        case let .response(status, body):
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                      url: url,
+                      statusCode: status,
+                      httpVersion: nil,
+                      headerFields: nil
+                  ) else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+                return
+            }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: body)
             client?.urlProtocolDidFinishLoading(self)

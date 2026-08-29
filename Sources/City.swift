@@ -1,6 +1,6 @@
 import Foundation
 
-struct City: Equatable, Hashable {
+struct City: Equatable, Hashable, Sendable {
     let code: String
     let timeZoneIdentifier: String
     let displayName: String
@@ -9,7 +9,7 @@ struct City: Equatable, Hashable {
     private let _timeZone: TimeZone
 
     var timeZone: TimeZone {
-        return _timeZone
+        _timeZone
     }
 
     init(code: String, timeZoneIdentifier: String, displayName: String? = nil, emoji: String? = nil) {
@@ -17,7 +17,7 @@ struct City: Equatable, Hashable {
         self.timeZoneIdentifier = timeZoneIdentifier
         self.displayName = displayName ?? code
         self.emoji = emoji ?? "🌍"
-        self._timeZone = TimeZone(identifier: timeZoneIdentifier) ?? TimeZone.current
+        _timeZone = TimeZone(identifier: timeZoneIdentifier) ?? TimeZone.current
     }
 
     func hash(into hasher: inout Hasher) {
@@ -25,6 +25,6 @@ struct City: Equatable, Hashable {
     }
 
     static func == (lhs: City, rhs: City) -> Bool {
-        return lhs.code == rhs.code
+        lhs.code == rhs.code
     }
 }

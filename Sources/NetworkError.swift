@@ -1,24 +1,24 @@
 import Foundation
 
-enum NetworkError: LocalizedError {
+enum NetworkError: LocalizedError, Sendable {
     case invalidCityName
     case invalidResponse(statusCode: Int)
-    case decodingError(Error)
+    case decodingError(String)
     case invalidWeatherData
-    case networkError(Error)
+    case networkError(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidCityName:
-            return "Invalid city name"
-        case .invalidResponse(let statusCode):
-            return "Server error (code: \(statusCode))"
-        case .decodingError(let error):
-            return "Data parsing error: \(error.localizedDescription)"
+            "Invalid city name"
+        case let .invalidResponse(statusCode):
+            "Server error (code: \(statusCode))"
+        case let .decodingError(message):
+            "Data parsing error: \(message)"
         case .invalidWeatherData:
-            return "Invalid weather data format"
-        case .networkError(let error):
-            return "Network error: \(error.localizedDescription)"
+            "Invalid weather data format"
+        case let .networkError(message):
+            "Network error: \(message)"
         }
     }
 }
