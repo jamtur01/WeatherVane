@@ -48,8 +48,9 @@ minutes, and the menu bar rotates through selected cities every three seconds.
 swiftformat Sources Tests Icon --lint --cache ignore
 swiftlint lint --strict --no-cache Sources Tests Icon
 shellcheck build.sh
-shfmt -d -i 2 build.sh
-swift test -Xswiftc -warnings-as-errors
+shellcheck Scripts/check-coverage.sh
+shfmt -d -i 2 build.sh Scripts/check-coverage.sh
+Scripts/check-coverage.sh
 swift build -c release -Xswiftc -warnings-as-errors
 ```
 

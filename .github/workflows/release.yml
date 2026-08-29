@@ -29,11 +29,11 @@ jobs:
 
       - name: Check build script
         run: |
-          shellcheck build.sh
-          shfmt -d -i 2 build.sh
+          shellcheck build.sh Scripts/check-coverage.sh
+          shfmt -d -i 2 build.sh Scripts/check-coverage.sh
 
-      - name: Test
-        run: swift test -Xswiftc -warnings-as-errors
+      - name: Test and check coverage
+        run: Scripts/check-coverage.sh
 
       - name: Build release configuration
         run: swift build -c release -Xswiftc -warnings-as-errors
