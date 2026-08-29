@@ -25,11 +25,30 @@ final class DateFormatterManagerTests: XCTestCase {
         XCTAssertEqual(DateFormatterManager.formatGMTOffset(for: city("Pacific/Honolulu")), "GMT-10")
     }
 
+    func testShortTimeHonorsTwelveAndTwentyFourHourFormats() throws {
+        let date = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-05-31T13:05:00Z")
+        )
+        let utc = city("UTC")
+
+        XCTAssertEqual(
+            DateFormatterManager.formatShortTime(for: utc, date: date, use24Hour: true),
+            "13:05"
+        )
+        XCTAssertEqual(
+            DateFormatterManager.formatShortTime(for: utc, date: date, use24Hour: false),
+            "1:05 PM"
+        )
+    }
+
     func testForecastDateLabels() throws {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let today = formatter.string(from: Date())
-        let tomorrow = try formatter.string(from: XCTUnwrap(Calendar.current.date(byAdding: .day, value: 1, to: Date())))
+        let tomorrowDate = try XCTUnwrap(
+            Calendar.current.date(byAdding: .day, value: 1, to: Date())
+        )
+        let tomorrow = formatter.string(from: tomorrowDate)
 
         XCTAssertEqual(DateFormatterManager.formatForecastDate(today), "Today")
         XCTAssertEqual(DateFormatterManager.formatForecastDate(tomorrow), "Tomorrow")

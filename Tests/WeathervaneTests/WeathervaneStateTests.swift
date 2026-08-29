@@ -28,7 +28,7 @@ final class WeathervaneStateTests: XCTestCase {
             availableCities: TimeZoneData.allTimezones
         )
 
-        XCTAssertEqual(cities.count, Constants.maxCitiesToDisplay)
+        XCTAssertEqual(cities.count, Constants.maxSelectedCities)
     }
 
     func testRemovingCityCancelsInFlightWeatherRequest() async throws {

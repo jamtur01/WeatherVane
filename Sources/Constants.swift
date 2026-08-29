@@ -1,5 +1,5 @@
-import Foundation
 import CoreGraphics
+import Foundation
 
 enum Constants {
     // Timer intervals
@@ -11,7 +11,7 @@ enum Constants {
     static let weatherRecoveryBaseDelay: TimeInterval = 30.0 // 30s, 60s, 120s
     static let maxWeatherRecoveryAttempts = 3
 
-    // Time calculations
+    /// Time calculations
     static let secondsPerHour: TimeInterval = 3600
 
     // UI dimensions
@@ -37,15 +37,15 @@ enum Constants {
     static let settingsWindowWidth: CGFloat = 500
     static let settingsWindowHeight: CGFloat = 600
 
-    // UI layout
+    /// UI layout
     static let defaultPadding: CGFloat = 16
 
     // Default values
     static let defaultCityCodes = ["NYC", "LHR", "MEL", "LAX", "CHI"]
     static let defaultMenuBarTitle = "⏳ Loading..."
 
-    // Performance
-    static let maxCitiesToDisplay = 50
+    /// Performance
+    static let maxSelectedCities = 50
 
     // Date formatting
     static let shortTimeFormat12 = "h:mm a"

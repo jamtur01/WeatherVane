@@ -128,7 +128,7 @@ final class WeathervaneState: ObservableObject {
         cancelAllWeatherWork()
         selectedCities = Array(
             TimeZoneManager.sortCitiesByTimezone(cities)
-                .prefix(Constants.maxCitiesToDisplay)
+                .prefix(Constants.maxSelectedCities)
         )
         currentCityIndex = 0
         pruneWeatherState(toKeep: Set(selectedCities.map(\.code)))
@@ -200,7 +200,7 @@ final class WeathervaneState: ObservableObject {
         }
         return Array(
             TimeZoneManager.sortCitiesByTimezone(cities)
-                .prefix(Constants.maxCitiesToDisplay)
+                .prefix(Constants.maxSelectedCities)
         )
     }
 

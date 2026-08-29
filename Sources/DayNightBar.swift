@@ -25,7 +25,7 @@ struct DayNightBar: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                tickMarks(width: geo.size.width)
+                tickMarks
                 marker(width: geo.size.width)
             }
             .frame(height: totalHeight)
@@ -35,21 +35,28 @@ struct DayNightBar: View {
         .frame(height: totalHeight)
     }
 
-    private func tickMarks(width: CGFloat) -> some View {
-        ForEach(0 ..< tickCount, id: \.self) { tick in
-            let hour = Double(tick) / 4.0
-            let position = CGFloat(tick) / CGFloat(tickCount - 1) * width
-            let isMajor = tick % 24 == 0
-            let isHour = tick % 4 == 0
-            let height: CGFloat = isMajor ? 14 : (isHour ? 9 : 5)
-            let isDaytime = hour >= 6 && hour <= 18
-            let color = isDaytime ? Self.daytimeTickColor : Self.nighttimeTickColor
-
-            Rectangle()
-                .fill(color)
-                .frame(width: 1, height: height)
-                .position(x: position, y: totalHeight / 2)
+    private var tickMarks: some View {
+        Canvas { context, size in
+            for tick in 0 ..< tickCount {
+                let hour = Double(tick) / 4
+                let position = CGFloat(tick) / CGFloat(tickCount - 1) * size.width
+                let height = tickHeight(for: tick)
+                let color = hour >= 6 && hour <= 18
+                    ? Self.daytimeTickColor
+                    : Self.nighttimeTickColor
+                var path = Path()
+                path.move(to: CGPoint(x: position, y: (totalHeight - height) / 2))
+                path.addLine(to: CGPoint(x: position, y: (totalHeight + height) / 2))
+                context.stroke(path, with: .color(color), lineWidth: 1)
+            }
         }
+    }
+
+    private func tickHeight(for tick: Int) -> CGFloat {
+        if tick.isMultiple(of: 24) {
+            return 14
+        }
+        return tick.isMultiple(of: 4) ? 9 : 5
     }
 
     private func marker(width: CGFloat) -> some View {
@@ -75,7 +82,8 @@ struct DayNightBar: View {
         let hour = cal.component(.hour, from: effectiveNow)
         let minute = cal.component(.minute, from: effectiveNow)
         let fraction = (Double(hour) + Double(minute) / 60.0) / 24.0
-        return CGFloat(fraction) * width
+        let availableWidth = max(width - markerSize, 0)
+        return markerSize / 2 + CGFloat(fraction) * availableWidth
     }
 
     private func dragGesture(width: CGFloat) -> some Gesture {
@@ -87,7 +95,10 @@ struct DayNightBar: View {
                 guard isDragging || moved >= Constants.dayNightBarDragThreshold else { return }
                 isDragging = true
 
-                let fraction = max(0, min(value.location.x / width, 1.0))
+                guard width > 0 else {
+                    return
+                }
+                let fraction = max(0, min(value.location.x / width, 1))
                 onDrag(Self.targetDate(
                     forFraction: fraction,
                     on: effectiveNow,

@@ -37,7 +37,7 @@ struct CombinedPopoverView: View {
 
     private var cityList: some View {
         ScrollView {
-            VStack(spacing: Constants.rowSpacing) {
+            LazyVStack(spacing: Constants.rowSpacing) {
                 ForEach(appState.selectedCities, id: \.code) { city in
                     TimezoneRow(
                         city: city,
@@ -91,20 +91,22 @@ struct CombinedPopoverView: View {
         VStack(spacing: 10) {
             Divider().opacity(0.5)
 
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    appState.resetTime()
+            if !appState.selectedCities.isEmpty {
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        appState.resetTime()
+                    }
+                } label: {
+                    Text("Reset")
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
-            } label: {
-                Text("Reset")
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .disabled(!appState.isVirtualTime)
+                .padding(.horizontal, 12)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .disabled(!appState.isVirtualTime)
-            .padding(.horizontal, 12)
 
             HStack {
                 footerButton(systemImage: "plus", label: "Add") {
