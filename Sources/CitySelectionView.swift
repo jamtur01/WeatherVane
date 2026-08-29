@@ -182,7 +182,7 @@ struct CitySelectionRow: View {
                     Text(city.displayName)
                         .font(.body)
                     Spacer()
-                    Text(DateFormatterManager.formatShortTime(
+                    Text(DateFormatting.formatShortTime(
                         for: city,
                         date: currentDate,
                         use24Hour: use24Hour

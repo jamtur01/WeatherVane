@@ -1,28 +1,28 @@
 @testable import Weathervane
 import XCTest
 
-final class DateFormatterManagerTests: XCTestCase {
+final class DateFormattingTests: XCTestCase {
     private func city(_ identifier: String) -> City {
         City(code: "TST", timeZoneIdentifier: identifier)
     }
 
     func testGMTOffsetWholeHours() {
-        XCTAssertEqual(DateFormatterManager.formatGMTOffset(for: city("UTC")), "GMT+0")
+        XCTAssertEqual(DateFormatting.formatGMTOffset(for: city("UTC")), "GMT+0")
     }
 
     func testGMTOffsetHalfHour() {
         // India is a fixed +5:30 with no DST, so this is date-independent.
-        XCTAssertEqual(DateFormatterManager.formatGMTOffset(for: city("Asia/Kolkata")), "GMT+5:30")
+        XCTAssertEqual(DateFormatting.formatGMTOffset(for: city("Asia/Kolkata")), "GMT+5:30")
     }
 
     func testGMTOffsetQuarterHour() {
         // Nepal is a fixed +5:45.
-        XCTAssertEqual(DateFormatterManager.formatGMTOffset(for: city("Asia/Kathmandu")), "GMT+5:45")
+        XCTAssertEqual(DateFormatting.formatGMTOffset(for: city("Asia/Kathmandu")), "GMT+5:45")
     }
 
     func testGMTOffsetNegative() {
         // Hawaii is a fixed -10 with no DST.
-        XCTAssertEqual(DateFormatterManager.formatGMTOffset(for: city("Pacific/Honolulu")), "GMT-10")
+        XCTAssertEqual(DateFormatting.formatGMTOffset(for: city("Pacific/Honolulu")), "GMT-10")
     }
 
     func testShortTimeHonorsTwelveAndTwentyFourHourFormats() throws {
@@ -32,11 +32,11 @@ final class DateFormatterManagerTests: XCTestCase {
         let utc = city("UTC")
 
         XCTAssertEqual(
-            DateFormatterManager.formatShortTime(for: utc, date: date, use24Hour: true),
+            DateFormatting.formatShortTime(for: utc, date: date, use24Hour: true),
             "13:05"
         )
         XCTAssertEqual(
-            DateFormatterManager.formatShortTime(for: utc, date: date, use24Hour: false),
+            DateFormatting.formatShortTime(for: utc, date: date, use24Hour: false),
             "1:05 PM"
         )
     }
@@ -50,12 +50,12 @@ final class DateFormatterManagerTests: XCTestCase {
         )
         let tomorrow = formatter.string(from: tomorrowDate)
 
-        XCTAssertEqual(DateFormatterManager.formatForecastDate(today), "Today")
-        XCTAssertEqual(DateFormatterManager.formatForecastDate(tomorrow), "Tomorrow")
+        XCTAssertEqual(DateFormatting.formatForecastDate(today), "Today")
+        XCTAssertEqual(DateFormatting.formatForecastDate(tomorrow), "Tomorrow")
     }
 
     func testForecastDateInvalidStringPassesThrough() {
-        XCTAssertEqual(DateFormatterManager.formatForecastDate("not-a-date"), "not-a-date")
+        XCTAssertEqual(DateFormatting.formatForecastDate("not-a-date"), "not-a-date")
     }
 
     func testForecastDateLabelsUseTrackedCityTimeZone() throws {
@@ -65,7 +65,7 @@ final class DateFormatterManagerTests: XCTestCase {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
 
         XCTAssertEqual(
-            DateFormatterManager.formatForecastDate(
+            DateFormatting.formatForecastDate(
                 "2026-05-30",
                 timeZone: timeZone,
                 now: now

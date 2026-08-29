@@ -1,8 +1,7 @@
-import XCTest
 @testable import Weathervane
+import XCTest
 
 final class CityAndTimeZoneTests: XCTestCase {
-
     // MARK: - City
 
     func testCityDefaultsDisplayNameToCode() {
@@ -17,21 +16,21 @@ final class CityAndTimeZoneTests: XCTestCase {
     }
 
     func testCityEqualityAndHashingUseCodeOnly() {
-        let a = City(code: "NYC", timeZoneIdentifier: "America/New_York", displayName: "New York")
-        let b = City(code: "NYC", timeZoneIdentifier: "UTC", displayName: "Different")
-        XCTAssertEqual(a, b)
-        XCTAssertEqual(Set([a, b]).count, 1)
+        let firstCity = City(code: "NYC", timeZoneIdentifier: "America/New_York", displayName: "New York")
+        let sameCodeCity = City(code: "NYC", timeZoneIdentifier: "UTC", displayName: "Different")
+        XCTAssertEqual(firstCity, sameCodeCity)
+        XCTAssertEqual(Set([firstCity, sameCodeCity]).count, 1)
     }
 
-    // MARK: - TimeZoneManager
+    // MARK: - City catalog
 
     func testSortCitiesByTimezoneOrdersByOffsetAscending() {
         let unsorted = [
             City(code: "MEL", timeZoneIdentifier: "Australia/Melbourne"),
             City(code: "LAX", timeZoneIdentifier: "America/Los_Angeles"),
-            City(code: "UTC", timeZoneIdentifier: "UTC"),
+            City(code: "UTC", timeZoneIdentifier: "UTC")
         ]
-        let sorted = TimeZoneManager.sortCitiesByTimezone(unsorted)
+        let sorted = CityCatalog.sortedByTimeZone(unsorted)
         let offsets = sorted.map { $0.timeZone.secondsFromGMT() }
         XCTAssertEqual(offsets, offsets.sorted())
         XCTAssertEqual(sorted.first?.code, "LAX")
@@ -39,7 +38,7 @@ final class CityAndTimeZoneTests: XCTestCase {
     }
 
     func testDefaultCitiesAreNonEmptyAndSorted() {
-        let defaults = TimeZoneManager.getDefaultCities()
+        let defaults = CityCatalog.defaultCities
         XCTAssertFalse(defaults.isEmpty)
         let offsets = defaults.map { $0.timeZone.secondsFromGMT() }
         XCTAssertEqual(offsets, offsets.sorted())

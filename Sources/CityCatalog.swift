@@ -1,6 +1,6 @@
 import Foundation
 
-enum TimeZoneManager {
+enum CityCatalog {
     private static func sortByTimezoneOffset(_ cities: [City]) -> [City] {
         cities.sorted { city1, city2 in
             let offset1 = city1.timeZone.secondsFromGMT()
@@ -9,20 +9,19 @@ enum TimeZoneManager {
         }
     }
 
-    static func getAllAvailableCities() -> [City] {
+    static var allCities: [City] {
         sortByTimezoneOffset(TimeZoneData.allTimezones)
     }
 
-    static func getDefaultCities() -> [City] {
+    static var defaultCities: [City] {
         let defaultCodes = Constants.defaultCityCodes
-        let allCities = getAllAvailableCities()
         let defaultCities = defaultCodes.compactMap { code in
             allCities.first { $0.code == code }
         }
-        return sortCitiesByTimezone(defaultCities)
+        return sortedByTimeZone(defaultCities)
     }
 
-    static func sortCitiesByTimezone(_ cities: [City]) -> [City] {
+    static func sortedByTimeZone(_ cities: [City]) -> [City] {
         sortByTimezoneOffset(cities)
     }
 }

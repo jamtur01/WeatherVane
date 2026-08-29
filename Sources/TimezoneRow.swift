@@ -43,10 +43,10 @@ struct TimezoneRow: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.primary)
                 HStack(spacing: 8) {
-                    Text(DateFormatterManager.formatGMTOffset(for: city, date: effectiveNow))
+                    Text(DateFormatting.formatGMTOffset(for: city, date: effectiveNow))
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
-                    Text(DateFormatterManager.formatRowDate(for: city, date: effectiveNow))
+                    Text(DateFormatting.formatRowDate(for: city, date: effectiveNow))
                         .font(.system(size: 12))
                         .foregroundColor(dateColor)
                         .underline(color: dateColor.opacity(0.5))
@@ -66,7 +66,7 @@ struct TimezoneRow: View {
     }
 
     private func bigTimeView(timeColor: Color) -> some View {
-        let timeString = DateFormatterManager.formatBigTime(for: city, date: effectiveNow, use24Hour: use24Hour)
+        let timeString = DateFormatting.formatBigTime(for: city, date: effectiveNow, use24Hour: use24Hour)
         let parts = timeString.split(separator: ":", maxSplits: 1).map(String.init)
         let hour = parts.first ?? timeString
         let minute = parts.count > 1 ? parts[1] : ""
@@ -177,7 +177,7 @@ struct TimezoneRow: View {
                 HStack(spacing: 12) {
                     ForEach(weather.forecasts.prefix(3), id: \.date) { forecast in
                         VStack(spacing: 2) {
-                            Text(DateFormatterManager.formatForecastDate(
+                            Text(DateFormatting.formatForecastDate(
                                 forecast.date,
                                 timeZone: city.timeZone
                             ))

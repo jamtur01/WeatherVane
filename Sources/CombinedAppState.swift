@@ -67,7 +67,7 @@ final class WeathervaneState: ObservableObject {
     ) {
         self.weatherService = weatherService
         self.userDefaults = userDefaults
-        allAvailableTimezones = TimeZoneManager.getAllAvailableCities()
+        allAvailableTimezones = CityCatalog.allCities
         selectedCities = []
         virtualNow = nil
         use24HourTime = Self.loadTimeFormat(from: userDefaults)
@@ -93,13 +93,13 @@ final class WeathervaneState: ObservableObject {
 
     func getTimeString(for city: City, shortFormat: Bool = false) -> String {
         if shortFormat {
-            return DateFormatterManager.formatShortTime(
+            return DateFormatting.formatShortTime(
                 for: city,
                 date: effectiveNow,
                 use24Hour: use24HourTime
             )
         }
-        return DateFormatterManager.formatLongTime(
+        return DateFormatting.formatLongTime(
             for: city,
             date: effectiveNow,
             use24Hour: use24HourTime
@@ -127,7 +127,7 @@ final class WeathervaneState: ObservableObject {
     func updateSelectedCities(_ cities: [City]) {
         cancelAllWeatherWork()
         selectedCities = Array(
-            TimeZoneManager.sortCitiesByTimezone(cities)
+            CityCatalog.sortedByTimeZone(cities)
                 .prefix(Constants.maxSelectedCities)
         )
         currentCityIndex = 0
@@ -199,7 +199,7 @@ final class WeathervaneState: ObservableObject {
             return defaultCities(from: availableCities)
         }
         return Array(
-            TimeZoneManager.sortCitiesByTimezone(cities)
+            CityCatalog.sortedByTimeZone(cities)
                 .prefix(Constants.maxSelectedCities)
         )
     }
@@ -215,7 +215,7 @@ final class WeathervaneState: ObservableObject {
         let cities = Constants.defaultCityCodes.compactMap { code in
             availableCities.first { $0.code == code }
         }
-        return TimeZoneManager.sortCitiesByTimezone(cities)
+        return CityCatalog.sortedByTimeZone(cities)
     }
 
     private func startCityRotationTimer() {

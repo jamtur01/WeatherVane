@@ -1,7 +1,7 @@
 import Foundation
 
-/// Centralized date formatter management.
-final class DateFormatterManager {
+/// Thread-safe date formatting for city-local clocks and forecasts.
+enum DateFormatting {
     private static let lock = NSLock()
 
     private static let shortFormatter12: DateFormatter = makeFormatter(Constants.shortTimeFormat12)
@@ -12,7 +12,7 @@ final class DateFormatterManager {
     private static let bigTimeFormatter12: DateFormatter = makeFormatter(Constants.bigTimeFormat12)
     private static let bigTimeFormatter24: DateFormatter = makeFormatter(Constants.bigTimeFormat24)
 
-    static let forecastDateFormatter: DateFormatter = {
+    private static let forecastDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -20,14 +20,12 @@ final class DateFormatterManager {
         return formatter
     }()
 
-    static let dayOfWeekFormatter: DateFormatter = {
+    private static let dayOfWeekFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "EEE"
         return formatter
     }()
-
-    private init() {}
 
     private static func makeFormatter(_ format: String) -> DateFormatter {
         let formatter = DateFormatter()
