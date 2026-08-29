@@ -78,6 +78,7 @@ jobs:
             -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "temporary-password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
           identity_hash="$(security find-identity -v -p codesigning "$keychain_path" |
             awk '$2 ~ /^[[:xdigit:]]{40}$/ { print $2; exit }')"
           if [[ -z "$identity_hash" ]]; then
@@ -92,7 +93,6 @@ jobs:
       - name: Sign and verify app
         run: |
           /usr/bin/codesign --force --options runtime --timestamp \
-            --keychain "$RUNNER_TEMP/build.keychain-db" \
             --sign "$CODESIGN_IDENTITY" Weathervane.app
           /usr/bin/codesign --verify --deep --strict --verbose=4 Weathervane.app
 
