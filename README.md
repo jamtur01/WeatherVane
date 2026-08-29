@@ -1,70 +1,83 @@
 # Weathervane
 
-A macOS menu bar app that displays real-time weather and local times for cities around the world.
+A native macOS menu bar app for comparing local times and weather across cities.
 
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-blue)
-![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
+![Swift 6](https://img.shields.io/badge/Swift-6-orange)
 
 ## Features
 
-- **Menu bar display** — cycles through selected cities showing weather, temperature, and local time
-- **Weather details** — temperature, feels-like, humidity, chance of rain, wind, pressure, visibility, and 3-day forecast
-- **100+ cities** across all continents and time zones
-- **Time offset controls** — shift time forward/backward by hours to plan across time zones
-- **Searchable city picker** — select which cities to track
-- **Zero dependencies** — uses only Apple frameworks and the free [wttr.in](https://wttr.in) API
+- Menu bar display that rotates through selected cities
+- Current temperature, feels-like temperature, humidity, rain chance, wind, and a three-day forecast
+- More than 100 cities across global time zones
+- Draggable full-day time scale and date picker for planning across time zones
+- Searchable city picker for selecting up to 50 cities
+- 12-hour and 24-hour clock formats
+- No third-party runtime dependencies; weather comes from the free [wttr.in](https://wttr.in) API
+
+## Requirements
+
+- macOS 13 or later
+- Swift 6 and the Xcode command-line tools for local builds
 
 ## Building
-
-Requires Xcode command-line tools with Swift 5.9+.
 
 ```sh
 # Development build
 swift build
 
-# Universal (arm64 + x86_64) app bundle
+# Universal arm64 and x86_64 application bundle
 ./build.sh
 open Weathervane.app
 ```
 
-The build script creates a signed `.app` bundle. Without a Developer ID certificate it falls back to ad-hoc signing — users may need to right-click and select **Open** on first launch.
+The build script creates a hardened-runtime app bundle. Local builds use an ad-hoc signature unless both
+`APPLE_DEVELOPER_CERTIFICATE_P12_BASE64` and `APPLE_DEVELOPER_CERTIFICATE_PASSWORD` are set.
 
 ## Usage
 
-Weathervane lives in the menu bar. Click the status item to open a popover with all selected cities, their current weather, and local times.
+Click the menu bar item to open the city list. Drag a city's time scale to compare another time, or click its date to
+choose a day. Double-click the scale or select Reset to return to the current time.
 
-- **Hour controls** — shift the displayed time forward or backward
-- **Settings** — open the city picker to add or remove cities
-- **Quit** — exit from the popover header
+Open Settings to search for cities, change the clock format, or clear the selection. Weather refreshes every five
+minutes, and the menu bar rotates through selected cities every three seconds.
 
-Weather data refreshes every 5 minutes. The menu bar rotates through cities every 3 seconds.
+## Quality checks
 
-## Project Structure
-
+```sh
+swiftformat Sources Tests Icon --lint --cache ignore
+swiftlint lint --strict --no-cache Sources Tests Icon
+shellcheck build.sh
+shfmt -d -i 2 build.sh
+swift test -Xswiftc -warnings-as-errors
+swift build -c release -Xswiftc -warnings-as-errors
 ```
+
+GitHub Actions runs these checks for pushes and pull requests. Version tags matching `v*` also build, sign, notarize,
+staple, and publish the app archive.
+
+## Project structure
+
+```text
 Sources/
-  main.swift                  App entry point
-  AppDelegate.swift           App lifecycle, hides dock icon
-  CombinedStatusBarController.swift  Menu bar item and popover management
-  CombinedAppState.swift      Central state (cities, weather data, timers)
-  CombinedPopoverView.swift   Main popover UI (city rows, forecasts)
-  CitySelectionView.swift     Settings window with searchable city list
-  WeatherService.swift        wttr.in API client
-  WeatherModels.swift         API response Codable structs
-  DataModels.swift            App-level data models
-  City.swift                  City/timezone model
-  TimeZoneData.swift          Static city database (100+ entries)
-  TimeZoneManager.swift       Timezone sorting and default city logic
-  DateFormatterManager.swift  Shared date formatters
-  TimerManager.swift          Timer wrapper utility
-  Constants.swift             App-wide constants
-  NetworkError.swift          Error types
-  SettingsWindowDelegate.swift  Window lifecycle delegate
+  main.swift                         App entry point
+  AppDelegate.swift                  Application lifecycle
+  CombinedStatusBarController.swift Menu bar, popover, and settings windows
+  CombinedAppState.swift             City selection, clocks, and weather state
+  CombinedPopoverView.swift          Main popover UI
+  CitySelectionView.swift            Searchable settings UI
+  TimezoneRow.swift                  City clock, planner, and weather UI
+  DayNightBar.swift                  Full-day time scale
+  WeatherService.swift               Async wttr.in client and retry policy
+  WeatherModels.swift                API response models
+  DataModels.swift                   App weather models
+  City.swift                         City and time-zone model
+  TimeZoneData.swift                 Static city database
+  CityCatalog.swift                  City sorting and defaults
+  DateFormatting.swift               Thread-safe city-local formatting
+  Constants.swift                    Shared constants
+  NetworkError.swift                 Weather request errors
 Info/
-  Info.plist                  App bundle configuration
-  Weathervane.entitlements    Sandbox entitlements
+  Info.plist                         Application bundle metadata
+Tests/WeathervaneTests/              Behavior and regression tests
 ```
-
-## License
-
-See [LICENSE](LICENSE) for details.

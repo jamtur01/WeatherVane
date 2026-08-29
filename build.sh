@@ -1,127 +1,135 @@
 #!/bin/bash
-
-# Exit on error, unset variables, and pipe failures
 set -euo pipefail
 
-# Extract version from Info.plist
-VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Info/Info.plist)
-BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Info/Info.plist)
+readonly APP_DIR="Weathervane.app"
+readonly BUILD_DIR=".build"
+readonly ARM64_BINARY="$BUILD_DIR/arm64-apple-macosx/release/Weathervane"
+readonly X86_64_BINARY="$BUILD_DIR/x86_64-apple-macosx/release/Weathervane"
+TASK_TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/weathervane-build.XXXXXX")
+readonly TASK_TEMP_DIR
+readonly UNIVERSAL_BINARY="$TASK_TEMP_DIR/Weathervane"
+readonly ICONSET_DIR="$TASK_TEMP_DIR/AppIcon.iconset"
+readonly KEYCHAIN_PATH="$TASK_TEMP_DIR/app-signing.keychain-db"
+readonly CERTIFICATE_PATH="$TASK_TEMP_DIR/certificate.p12"
 
-echo "Building Weathervane version $VERSION (build $BUILD)..."
+keychain_created=false
 
-# Paths
-BUILD_DIR=".build"
-UNIVERSAL_OUTPUT="$BUILD_DIR/universal"
-ARM64_PATH="$BUILD_DIR/arm64-apple-macosx/release/Weathervane"
-X86_64_PATH="$BUILD_DIR/x86_64-apple-macosx/release/Weathervane"
-UNIVERSAL_BINARY="$UNIVERSAL_OUTPUT/Weathervane"
+cleanup() {
+  local exit_status=$?
+  local cleanup_failed=false
+  trap - EXIT
+  set +e
 
-# Clean previous universal output
-rm -rf "$UNIVERSAL_OUTPUT"
-mkdir -p "$UNIVERSAL_OUTPUT"
+  if [[ "$keychain_created" == true ]]; then
+    if ! security delete-keychain "$KEYCHAIN_PATH"; then
+      echo "Failed to delete temporary signing keychain: $KEYCHAIN_PATH" >&2
+      cleanup_failed=true
+    fi
+  fi
+  if [[ -d "$TASK_TEMP_DIR" ]] && ! find "$TASK_TEMP_DIR" -depth -delete; then
+    echo "Failed to delete temporary build directory: $TASK_TEMP_DIR" >&2
+    cleanup_failed=true
+  fi
+  if [[ "$cleanup_failed" == true && $exit_status -eq 0 ]]; then
+    exit_status=1
+  fi
+  exit "$exit_status"
+}
 
-# Build for Apple Silicon and Intel
-echo "Building for arm64..."
-swift build -c release --arch arm64
+reset_app_bundle() {
+  if [[ -e "$APP_DIR" ]]; then
+    find "$APP_DIR" -depth -delete
+  fi
+  mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+}
 
-echo "Building for x86_64..."
-swift build -c release --arch x86_64
+generate_icon() {
+  local icon_source="Icon/icon.png"
+  if [[ ! -r "$icon_source" ]]; then
+    echo "App icon source is missing or unreadable: $icon_source" >&2
+    return 1
+  fi
 
-# Create universal binary
-echo "Creating universal binary..."
-lipo -create "$ARM64_PATH" "$X86_64_PATH" -output "$UNIVERSAL_BINARY"
-
-# Verify architecture of universal binary
-echo "Verifying architectures in universal binary:"
-lipo -info "$UNIVERSAL_BINARY"
-
-# Create application bundle
-echo "Creating application bundle..."
-APP_DIR="Weathervane.app"
-CONTENTS_DIR="$APP_DIR/Contents"
-MACOS_DIR="$CONTENTS_DIR/MacOS"
-RESOURCES_DIR="$CONTENTS_DIR/Resources"
-
-mkdir -p "$MACOS_DIR"
-mkdir -p "$RESOURCES_DIR"
-
-# Copy universal binary and rename to match app name
-cp "$UNIVERSAL_BINARY" "$MACOS_DIR/Weathervane"
-chmod +x "$MACOS_DIR/Weathervane"
-
-# Copy Info.plist
-cp Info/Info.plist "$CONTENTS_DIR/"
-
-# Generate the app icon (.icns) from the 1024px source PNG and bundle it.
-# sips and iconutil ship with macOS, so this works locally and in CI.
-ICON_SOURCE="Icon/icon.png"
-if [ -r "$ICON_SOURCE" ]; then
-  echo "Generating app icon from $ICON_SOURCE..."
-  ICONSET_DIR="$BUILD_DIR/AppIcon.iconset"
-  rm -rf "$ICONSET_DIR"
   mkdir -p "$ICONSET_DIR"
+  local size
   for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
-    sips -z "$((size * 2))" "$((size * 2))" "$ICON_SOURCE" --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
+    sips -z "$size" "$size" "$icon_source" \
+      --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
+    sips -z "$((size * 2))" "$((size * 2))" "$icon_source" \
+      --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
   done
-  iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AppIcon.icns"
-  rm -rf "$ICONSET_DIR"
-else
-  echo "Warning: $ICON_SOURCE not found; bundling without an app icon."
+  iconutil -c icns "$ICONSET_DIR" -o "$APP_DIR/Contents/Resources/AppIcon.icns"
+}
+
+sign_with_developer_id() {
+  local certificate_base64="${APPLE_DEVELOPER_CERTIFICATE_P12_BASE64:-}"
+  local certificate_password="${APPLE_DEVELOPER_CERTIFICATE_PASSWORD:-}"
+  if [[ -z "$certificate_base64" || -z "$certificate_password" ]]; then
+    echo "Both Developer ID certificate variables must be set." >&2
+    return 1
+  fi
+
+  security create-keychain -p "temporary-password" "$KEYCHAIN_PATH"
+  keychain_created=true
+  security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+  security unlock-keychain -p "temporary-password" "$KEYCHAIN_PATH"
+  printf '%s' "$certificate_base64" | base64 --decode >"$CERTIFICATE_PATH"
+  security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" \
+    -P "$certificate_password" -T /usr/bin/codesign
+  security set-key-partition-list -S apple-tool:,apple:,codesign: \
+    -s -k "temporary-password" "$KEYCHAIN_PATH"
+
+  local identity_hash
+  identity_hash="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" |
+    awk '$2 ~ /^[[:xdigit:]]{40}$/ { print $2; exit }')"
+  if [[ -z "$identity_hash" ]]; then
+    echo "No Developer ID signing identity was found in the imported certificate." >&2
+    return 1
+  fi
+
+  /usr/bin/codesign --force --options runtime --timestamp \
+    --keychain "$KEYCHAIN_PATH" --sign "$identity_hash" "$APP_DIR"
+}
+
+sign_locally() {
+  local certificate_base64="${APPLE_DEVELOPER_CERTIFICATE_P12_BASE64:-}"
+  local certificate_password="${APPLE_DEVELOPER_CERTIFICATE_PASSWORD:-}"
+  if [[ -n "$certificate_base64" || -n "$certificate_password" ]]; then
+    sign_with_developer_id
+  else
+    echo "No Developer ID certificate provided; applying an ad-hoc signature."
+    /usr/bin/codesign --force --options runtime --sign - "$APP_DIR"
+  fi
+  /usr/bin/codesign --verify --deep --strict --verbose=4 "$APP_DIR"
+}
+
+trap cleanup EXIT
+
+if [[ ! -r "Info/Info.plist" ]]; then
+  echo "App metadata is missing or unreadable: Info/Info.plist" >&2
+  exit 1
 fi
 
-# Sign the application
-if [ -z "${CI:-}" ]; then
-  if [ -n "${APPLE_DEVELOPER_CERTIFICATE_P12_BASE64:-}" ] && [ -n "${APPLE_DEVELOPER_CERTIFICATE_PASSWORD:-}" ]; then
-    echo "Code signing the application with Developer ID..."
+version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Info/Info.plist)
+build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Info/Info.plist)
+echo "Building Weathervane version $version (build $build)..."
 
-    KEYCHAIN_PATH=${RUNNER_TEMP:-/tmp}/app-signing.keychain-db
-    KEYCHAIN_PASSWORD="temporary-password"
+swift build -c release --arch arm64 -Xswiftc -warnings-as-errors
+swift build -c release --arch x86_64 -Xswiftc -warnings-as-errors
 
-    security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-    security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+lipo -create "$ARM64_BINARY" "$X86_64_BINARY" -output "$UNIVERSAL_BINARY"
+lipo "$UNIVERSAL_BINARY" -verify_arch arm64 x86_64
 
-    echo $APPLE_DEVELOPER_CERTIFICATE_P12_BASE64 | base64 --decode > certificate.p12
-    security import certificate.p12 -k "$KEYCHAIN_PATH" -P "$APPLE_DEVELOPER_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-    security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+reset_app_bundle
+cp "$UNIVERSAL_BINARY" "$APP_DIR/Contents/MacOS/Weathervane"
+chmod +x "$APP_DIR/Contents/MacOS/Weathervane"
+cp Info/Info.plist "$APP_DIR/Contents/"
+generate_icon
 
-    echo "Available signing identities:"
-    security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-
-    IDENTITY_HASH=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -o '[A-F0-9]\{40\}' | head -1)
-
-    if [ -z "$IDENTITY_HASH" ]; then
-      echo "No signing identity found in keychain. Using ad-hoc signing instead."
-      /usr/bin/codesign --force --options runtime --sign - "$APP_DIR" --deep
-    else
-      echo "Signing with identity hash: $IDENTITY_HASH"
-      /usr/bin/codesign --force --options runtime --entitlements "Info/Weathervane.entitlements" \
-        --sign "$IDENTITY_HASH" \
-        --keychain "$KEYCHAIN_PATH" \
-        "$APP_DIR" --deep --timestamp
-    fi
-
-    echo "Verifying signature..."
-    codesign -vvv --deep --strict "$APP_DIR" || echo "Warning: Signature verification failed, but continuing..."
-    rm certificate.p12
-  else
-    echo "No Developer ID certificate provided, using ad-hoc signing instead..."
-
-    if [ -r "Info/Weathervane.entitlements" ]; then
-      echo "Using entitlements file..."
-      /usr/bin/codesign --force --options runtime --entitlements "Info/Weathervane.entitlements" --sign - "$APP_DIR" --deep
-    else
-      echo "Entitlements file not found or not readable, using basic ad-hoc signing..."
-      /usr/bin/codesign --force --options runtime --sign - "$APP_DIR" --deep
-    fi
-
-    echo "Note: App is signed with ad-hoc signature. Users will need to right-click and select Open"
-    echo "or use 'xattr -cr Weathervane.app' after downloading to bypass Gatekeeper."
-  fi
+if [[ "${CI:-}" == "true" || "${CI:-}" == "1" ]]; then
+  echo "CI environment detected; signing is handled by the release workflow."
 else
-  echo "CI environment detected; skipping codesign in build.sh (handled by workflow)"
+  sign_locally
 fi
 
 echo "Application bundle created: $APP_DIR"
-echo "To run the application, use: open $APP_DIR"
