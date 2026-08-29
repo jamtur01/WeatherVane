@@ -20,7 +20,8 @@ jobs:
 
       - name: Install quality tools
         run: |
-          if brew tap | rg --quiet '^aws/tap$'; then
+          homebrew_repository=$(brew --repository)
+          if [[ -d "$homebrew_repository/Library/Taps/aws/homebrew-tap" ]]; then
             brew untap aws/tap
           fi
           brew install shellcheck shfmt swiftformat swiftlint
